@@ -1,7 +1,5 @@
-# Rinkboard Builder V24
+# Rinkboard Builder V25
 
-Adds **Active database** dropdown to the Dropbox database window. Click **Find databases** to list top-level folders accessible in your connected Dropbox account. Selecting a folder changes the active database and refreshes its contents. Existing **Shared folder path** remains available for nested folders; enter a custom path and click **Save Settings**. Switching databases clears old selections and the currently selected edit record, avoiding accidental cross-database updates.
+Removed the V24 Active database dropdown and Find databases button. The database now uses cascading Team → Season → Board size dropdowns, populated from the existing Dropbox folder structure and saved artboards. Each dropdown has an “+ Add new…” option; this creates the matching folder in Dropbox. Team and Season must be selected before creating a new size; sizes are 30 inches high and use the entered width. All teams/seasons/sizes can still be browsed via the All options. The existing Shared folder path setting remains for the root database. Individual selection checkboxes, export quantities, proof and production exports remain intact.
 
-Deploy `index.html` and `dropbox-database.js` together to GitHub Pages. Database folders must use the same Team / Season / 30xWidth / Sponsor.rinkboard.json structure.
-
-Note: Discovery lists top-level Dropbox folders; nested folders can be entered using the Shared folder path. Browser/Dropbox live testing has not been performed.
+Deploy both index.html and dropbox-database.js. Test in the connected browser before production use.
