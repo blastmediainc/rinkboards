@@ -37,17 +37,36 @@ async function exportSelected(){
  if(!proof&&!production)throw Error('Choose Proof PDFs, Production PDFs, or both.');
  const chosen=entries.filter(e=>selectedPaths.has(e.path)).sort((a,b)=>a.team.localeCompare(b.team)||a.season.localeCompare(b.season)||parseFloat(a.width)-parseFloat(b.width)||a.name.localeCompare(b.name));
  if(!chosen.length)throw Error('Select at least one artboard using the checkboxes.');
- message(`Loading ${chosen.length} selected artboard(s) from Dropbox…`);
- const boards=[];
- for(let i=0;i<chosen.length;i++){
-  const record=chosen[i],data=JSON.parse(await download(record.path));
+ const contact=$('dbExportContact').value.trim();
+ const proofBoards=[];
+ let exported=0;
+ for(const record of chosen){
+  message(`Loading ${record.name} from Dropbox (${exported+1}/${chosen.length})…`);
+  const data=JSON.parse(await download(record.path));
   if(!data.project||!Array.isArray(data.project.boards)||!data.project.boards[0])throw Error('Invalid database project: '+record.name);
-  const board=JSON.parse(JSON.stringify(data.project.boards[0]));const qty=exportQuantities.get(record.path)??1;if(!Number.isSafeInteger(qty)||qty<1||qty>500)throw Error('Invalid export quantity for '+record.name+' (1–500)');board.settings.qty=String(qty);boards.push(board);
+  const board=JSON.parse(JSON.stringify(data.project.boards[0]));
+  const qty=exportQuantities.get(record.path)??1;
+  if(!Number.isSafeInteger(qty)||qty<1||qty>500)throw Error('Invalid export quantity for '+record.name+' (1–500)');
+  board.settings.qty=String(qty);
+  // Contact is an export-only override; do not modify the saved Dropbox record.
+  if(contact)board.settings.contact=contact;
+  const stem=[record.team,record.season,record.name,record.size].map(sanitize).join('_');
+  if(proof)proofBoards.push(board);
+  if(production){
+   message('Generating production: '+record.name);
+   downloadPdf(await window.RinkboardBridge.exportDatabaseSelection([board],false),stem+'_Production.pdf');
+  }
+  exported++;
  }
- const prefix='BlastMedia_database_'+chosen.length+'_artboards';
- if(proof){message('Generating selected proof PDF…');downloadPdf(await window.RinkboardBridge.exportDatabaseSelection(boards,true),prefix+'_proofs.pdf')}
- if(production){message('Generating selected production PDF…');downloadPdf(await window.RinkboardBridge.exportDatabaseSelection(boards,false),prefix+'_production.pdf')}
- message(`Exported ${chosen.length} selected artboard(s)${proof?' as proofs':''}${proof&&production?' and':''}${production?' as production files':''}.`);
+ if(proof){
+  message('Generating combined proof PDF for '+proofBoards.length+' artboard(s)…');
+  const common=(field,fallback)=>chosen.every(r=>r[field]===chosen[0][field])?chosen[0][field]:fallback;
+  const proofStem=chosen.length===1
+   ?[chosen[0].team,chosen[0].season,chosen[0].name,chosen[0].size].map(sanitize).join('_')
+   :[common('team','MultipleTeams'),common('season','MultipleSeasons'),'Selected-'+chosen.length+'-Artboards',common('size','MixedSizes')].map(sanitize).join('_');
+  downloadPdf(await window.RinkboardBridge.exportDatabaseSelection(proofBoards,true),proofStem+'_Proof.pdf');
+ }
+ message(`Export complete: ${production?exported+' separate production PDF(s)':''}${production&&proof?' and ':''}${proof?'one combined proof PDF':''}. If downloads are missing, allow multiple downloads for this website.`);
 }
 async function loadPreview(tile,record){try{let svg=await download(record.path.replace(/\.rinkboard\.json$/i,'.preview.svg'));if(!tile.isConnected)return;let blob=new Blob([svg],{type:'image/svg+xml'}),url=URL.createObjectURL(blob),img=document.createElement('img');img.alt=record.name;img.onload=()=>URL.revokeObjectURL(url);img.onerror=()=>URL.revokeObjectURL(url);img.src=url;tile.prepend(img)}catch{}}
 function activeBoard(){let obj=window.RinkboardBridge.getProject();return {obj,board:obj.boards[obj.activeBoard]}}

@@ -1,5 +1,45 @@
-# Rinkboard Builder V25
+# Blast Media Rinkboard Builder
 
-Removed the V24 Active database dropdown and Find databases button. The database now uses cascading Team → Season → Board size dropdowns, populated from the existing Dropbox folder structure and saved artboards. Each dropdown has an “+ Add new…” option; this creates the matching folder in Dropbox. Team and Season must be selected before creating a new size; sizes are 30 inches high and use the entered width. All teams/seasons/sizes can still be browsed via the All options. The existing Shared folder path setting remains for the root database. Individual selection checkboxes, export quantities, proof and production exports remain intact.
+A browser-based tool for designing, organizing, and exporting hockey rinkboard graphics. The app can be hosted as a static website on GitHub Pages and connects to Dropbox for a shared artwork database.
 
-Deploy both index.html and dropbox-database.js. Test in the connected browser before production use.
+## What it does
+
+### Build rinkboard artwork
+- Create and edit rinkboard designs on artboards with adjustable widths and a standard 30-inch height.
+- Add and arrange artwork, including supported image, SVG, and PDF assets.
+- Manage multiple artboards, sponsor details, quantities, scale, bleed, and proof contact information.
+- Save editable project data for future changes.
+
+### Organize designs in Dropbox
+- Connect to Dropbox using your own account to access the team's shared database.
+- Browse saved rinkboards by **Team**, **Season**, and **Size**.
+- Add new teams, seasons, or sizes from the database interface.
+- Find saved artboards by name and reopen them for editing.
+
+### Export proofs and production files
+- Export proof PDFs for review, including contact information.
+- Export full-size production PDFs with quantity-based imposition, up to two rinkboards per page.
+- Production PDFs use separate named PDF layers: **artwork** for the design and **thru cut** for the blue centre dividing line on two-copy pages.
+- Select individual saved artboards using checkboxes, set an export quantity for each, and export proofs, production files, or both directly from the database.
+- Optionally override the proof contact name during database export without changing the saved artboard.
+- Selected proof artboards export together as **one multipage proof PDF**. A single-board proof uses `Team_Season_Sponsor_Size_Proof.pdf`; a multi-board proof uses a descriptive selection filename.
+- Each selected production artboard exports as a **separate production PDF**, named `Team_Season_Sponsor_Size_Production.pdf` (with its selected quantity imposed inside that PDF).
+
+## Files
+
+- `index.html` — Main application and interface.
+- `dropbox-database.js` — Dropbox connection and database functionality.
+
+Keep both files together in the same directory when publishing.
+
+## Publish with GitHub Pages
+
+1. Upload `index.html` and `dropbox-database.js` to your GitHub repository.
+2. Enable GitHub Pages for the repository's publishing branch if it is not already enabled.
+3. Open the published site, connect your Dropbox account, and select the shared database folder.
+
+## Notes
+
+- Dropbox access requires an appropriately configured Dropbox application and authorization from each user.
+- Browser settings may require permission for multiple downloads when exporting several artboards.
+- Before sending production files to print, verify the final PDF dimensions and named layers in your production software and confirm the cutter recognizes the blue centre line.

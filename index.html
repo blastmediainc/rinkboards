@@ -308,6 +308,7 @@ window.RinkboardBridge={getProject(){syncBoard();return clone({version:2,boards,
 <strong>Export from database</strong><button id="dbSelectVisible" type="button">Select visible</button><button id="dbClearSelection" type="button">Clear selection</button><span id="dbSelectionCount">0 selected</span>
 <label style="display:inline-flex;align-items:center;gap:5px"><input id="dbExportProof" type="checkbox" checked>Proof PDFs (10% scale)</label>
 <label style="display:inline-flex;align-items:center;gap:5px"><input id="dbExportProduction" type="checkbox">Production PDFs (100%, quantity, thru cut)</label>
+<label style="display:inline-flex;align-items:center;gap:6px">Proof contact <input id="dbExportContact" type="text" placeholder="Contact name (optional)" style="width:185px;max-width:100%;padding:6px" aria-label="Contact name for exported proofs"></label>
 <button id="dbExportSelected" class="dbPrimary" type="button">Export selected</button>
-<small style="flex-basis:100%">Each checked format exports one combined, multi-page PDF containing only the selected artboards. The editor stays unchanged.</small>
-</div><div id="dbGrid"></div></div><div id="dbMessage" role="status">Configure Dropbox to start. Your existing local project save/open remains available.</div></section></div><script src="dropbox-database.js?v=25"></script></body></html>
+<small style="flex-basis:100%">Exports a separate named PDF for each selected artboard and format. Contact name is applied to proofs only. The editor and saved database entries stay unchanged.</small>
+</div><div id="dbGrid"></div></div><div id="dbMessage" role="status">Configure Dropbox to start. Your existing local project save/open remains available.</div></section></div><script src="dropbox-database.js?v=26"></script></body></html>
