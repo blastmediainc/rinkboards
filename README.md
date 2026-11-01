@@ -1,12 +1,7 @@
-# Rinkboard Builder V21
+# Rinkboard Builder V24
 
-Upload `index.html` and `dropbox-database.js` to the root of the GitHub Pages repository, replacing both existing files.
+Adds **Active database** dropdown to the Dropbox database window. Click **Find databases** to list top-level folders accessible in your connected Dropbox account. Selecting a folder changes the active database and refreshes its contents. Existing **Shared folder path** remains available for nested folders; enter a custom path and click **Save Settings**. Switching databases clears old selections and the currently selected edit record, avoiding accidental cross-database updates.
 
-## Database batch exports
-- Tick the checkbox beside each artboard name. Select visible and Clear selection are available. Selections persist when changing filters.
-- Choose Proof PDFs, Production PDFs, or both. Click Export selected.
-- Each format downloads a combined PDF containing only selected artboards. Proofs use the builder's proof format (10% scale). Production uses the same 100% quantity-based two-copies-per-page imposed layout with `artwork` and `thru cut` PDF layers and a blue centre divider.
-- Saved Dropbox project JSON is used to regenerate the PDFs. The current editor project is restored afterwards.
-- Existing save/edit/Dropbox workflows remain available.
+Deploy `index.html` and `dropbox-database.js` together to GitHub Pages. Database folders must use the same Team / Season / 30xWidth / Sponsor.rinkboard.json structure.
 
-Note: When both output formats are checked, the browser may ask for permission to download multiple files. Production PDF layer compatibility should be validated in Acrobat before sending to the printer.
+Note: Discovery lists top-level Dropbox folders; nested folders can be entered using the Shared folder path. Browser/Dropbox live testing has not been performed.
