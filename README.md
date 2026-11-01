@@ -1,7 +1,12 @@
-# Rinkboard Builder V19 — Named production PDF layers
+# Rinkboard Builder V21
 
-Upload `index.html` and `dropbox-database.js` to the root of your GitHub Pages repository.
+Upload `index.html` and `dropbox-database.js` to the root of the GitHub Pages repository, replacing both existing files.
 
-Production PDFs have two actual PDF Optional Content Groups (layers), named **thru cut** (top) and **artwork** (bottom). The only item in thru cut is a 1 pt blue centre divider on two-copy pages. Single-copy pages have no cut line. Copies are imposed two per page at full size according to the artboard quantity. This applies to current-artboard export, all-artboards export and automatic Dropbox production PDF saves. Proof exports are unchanged.
+## Database batch exports
+- Tick the checkbox beside each artboard name. Select visible and Clear selection are available. Selections persist when changing filters.
+- Choose Proof PDFs, Production PDFs, or both. Click Export selected.
+- Each format downloads a combined PDF containing only selected artboards. Proofs use the builder's proof format (10% scale). Production uses the same 100% quantity-based two-copies-per-page imposed layout with `artwork` and `thru cut` PDF layers and a blue centre divider.
+- Saved Dropbox project JSON is used to regenerate the PDFs. The current editor project is restored afterwards.
+- Existing save/edit/Dropbox workflows remain available.
 
-Open a test PDF in Acrobat Pro > Layers to verify both names and visibility. Check page dimensions and confirm the printer recognizes the blue stroke in the thru cut layer before production. The PDF layer is an Optional Content Group, not an Illustrator-native layer. The PDF uses online JavaScript libraries, so the editor needs an internet connection.
+Note: When both output formats are checked, the browser may ask for permission to download multiple files. Production PDF layer compatibility should be validated in Acrobat before sending to the printer.
