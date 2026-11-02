@@ -84,3 +84,6 @@ V43: Band generator supports multiple selected database rinkboards, exported as 
 
 ## Database deletion (V44)
 Select one or more rinkboards in Database and click **Delete selected**. Type `DELETE` to confirm. Deletes the selected `.rinkboard.json` records and associated `.preview.svg` and `.production-100pct.pdf` files from Dropbox; does not delete team logos or folders. Dropbox permissions must include `files.content.write`. Deletions affect all users of the shared database.
+
+
+V48: Width changes automatically vertically center the artwork as a group; database size sections can be shown/hidden individually or all at once.
