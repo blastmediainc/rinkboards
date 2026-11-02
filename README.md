@@ -55,3 +55,8 @@ Choose **Team** and **Season / Year** from the builder sidebar, then click **Sav
 ## Database previews
 
 Hover over or focus a rinkboard name in the database to see its saved artwork preview at approximately 10% physical scale (subject to screen fitting). Previews are fetched from Dropbox on demand; the name-only database listing remains unchanged.
+
+
+## AI and EPS logos
+
+Upload PDF-compatible Illustrator (.ai) files directly. Other AI and EPS files are automatically converted to PDF through the Blast Media Cloudflare Worker and CloudConvert before being placed on the board. Converted PDFs are kept as vector originals for production export where supported. Files are sent to the third-party conversion service; do not upload confidential assets without authorization. Conversion requires a working Worker deployment, CloudConvert API key and service availability.
