@@ -70,3 +70,8 @@ Use **Generate Band** on the Builder screen, or select exactly one database rink
 
 
 V37: Band export uses vector PDF text/outlines and SVG rinkboard artwork. Uploaded PNG logos retain native resolution; raster elements in rinkboard SVG remain raster.
+
+
+V38: Improved Blast Media logo embedding in band PDF exports.
+
+V39: Restored the Blast Media Print header logo with a validated, optimized embedded PNG.

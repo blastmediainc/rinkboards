@@ -14,7 +14,7 @@ function image(src){return new Promise((resolve,reject)=>{const img=new Image();
 function drawFit(ctx,img,x,y,w,h){let r=Math.min(w/img.width,h/img.height);ctx.drawImage(img,x+(w-img.width*r)/2,y+(h-img.height*r)/2,img.width*r,img.height*r)}
 async function render(){const canvas=$('bandPreview'),ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);ctx.fillStyle='#211e1e';ctx.textAlign='center';ctx.textBaseline='middle';
 // Keep the left side blank for wrapping around the order.
-const brand=document.querySelector('header.top .brand img');if(brand){try{let img=await image(brand.src);drawFit(ctx,img,505,17,204,55)}catch{}}
+const brand=document.querySelector('header.top .brand img, .brand-logo');if(brand){try{let img=await image(brand.src);drawFit(ctx,img,505,17,204,55)}catch{}}
 if(logoData){try{drawFit(ctx,await image(logoData),525,92,170,119)}catch{}}
 ctx.font='bold 17px Lato,Arial,sans-serif';ctx.fillText('RINKBOARDS ('+$('bandSize').value.trim()+')',1021,31);
 ctx.font='bold 16px Lato,Arial,sans-serif';ctx.fillText('SHIPPED '+formatMonth($('bandMonth').value),1021,54);
@@ -34,8 +34,18 @@ async function exportBand(){
  const doc=new jsPDF({orientation:'landscape',unit:'pt',format:[W,H],compress:true});
  const center=(txt,x,y,sz)=>{doc.setFont('helvetica','bold');doc.setFontSize(sz);doc.setTextColor(33,30,30);doc.text(txt,x,y,{align:'center'})};
  const fitImage=async(src,x,y,w,h)=>{if(!src)return;const img=await image(src);const r=Math.min(w/img.naturalWidth,h/img.naturalHeight);const iw=img.naturalWidth*r,ih=img.naturalHeight*r;let format=/^data:image\/jpe?g/i.test(src)?'JPEG':'PNG';if(!/^data:image\/(png|jpe?g)/i.test(src)){const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;c.getContext('2d').drawImage(img,0,0);src=c.toDataURL('image/png');format='PNG'}doc.addImage(src,format,x+(w-iw)/2,y+(h-ih)/2,iw,ih)};
- const brand=document.querySelector('header.top .brand img');
- if(brand){try{await fitImage(brand.src,505,17,204,55)}catch(e){console.warn('Brand image unavailable',e)}}
+ const brand=document.querySelector('header.top .brand img, .brand-logo');
+ if(brand){try{
+   // Normalize the embedded Blast Media logo to a bounded PNG before passing it to jsPDF.
+   // The original base64 image is very large and can fail or appear corrupt in PDF viewers.
+   const logo=await image(brand.currentSrc||brand.src);
+   const c=document.createElement('canvas');c.width=1020;c.height=275;
+   const cx=c.getContext('2d');
+   const r=Math.min(c.width/logo.naturalWidth,c.height/logo.naturalHeight);
+   const iw=logo.naturalWidth*r,ih=logo.naturalHeight*r;
+   cx.drawImage(logo,(c.width-iw)/2,(c.height-ih)/2,iw,ih);
+   await fitImage(c.toDataURL('image/png'),505,17,204,55);
+ }catch(e){console.warn('Blast Media brand image unavailable',e);throw Error('Blast Media logo could not be embedded in the PDF: '+e.message)}}
  if(logoData){try{await fitImage(logoData,525,92,170,119)}catch(e){console.warn('Team logo unavailable',e)}}
  center('RINKBOARDS ('+$('bandSize').value.trim()+')',1021,36,17);
  center('SHIPPED '+formatMonth($('bandMonth').value),1021,59,16);
