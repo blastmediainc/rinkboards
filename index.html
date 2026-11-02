@@ -323,16 +323,19 @@ async function makeFlattenedCmykArtwork(output,source,trimWidth,trimHeight){
   ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);
   await pg.render({canvasContext:ctx,viewport:view,background:'rgb(255,255,255)'}).promise;
   const pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data;
-  // V68: Keep the flattened image in RGB temporarily. The Render service
-  // converts these source pixels with LittleCMS using CoatedGRACoL2006.icc.
-  const bytes=new Uint8Array(canvas.width*canvas.height*3);
-  for(let i=0,j=0;i<pixels.length;i+=4,j+=3){
-   bytes[j]=pixels[i];bytes[j+1]=pixels[i+1];bytes[j+2]=pixels[i+2];
+  const bytes=new Uint8Array(canvas.width*canvas.height*4);
+  for(let i=0,j=0;i<pixels.length;i+=4,j+=4){
+   const r=pixels[i]/255,g=pixels[i+1]/255,b=pixels[i+2]/255;
+   const k=1-Math.max(r,g,b),d=1-k;
+   bytes[j]=d>0?Math.round(255*(1-r-k)/d):0;
+   bytes[j+1]=d>0?Math.round(255*(1-g-k)/d):0;
+   bytes[j+2]=d>0?Math.round(255*(1-b-k)/d):0;
+   bytes[j+3]=Math.round(255*k);
   }
   const stream=output.context.flateStream(bytes,{
    Type:PDFLib.PDFName.of('XObject'),Subtype:PDFLib.PDFName.of('Image'),
    Width:PDFLib.PDFNumber.of(canvas.width),Height:PDFLib.PDFNumber.of(canvas.height),
-   ColorSpace:PDFLib.PDFName.of('DeviceRGB'),BitsPerComponent:PDFLib.PDFNumber.of(8)
+   ColorSpace:PDFLib.PDFName.of('DeviceCMYK'),BitsPerComponent:PDFLib.PDFNumber.of(8)
   });
   const ref=output.context.register(stream);
   return {ref,width:canvas.width,height:canvas.height,dpi:scale*72};
@@ -348,19 +351,6 @@ function drawFlattenedArtwork(output,page,img,x,y,width,height){
  page.pushOperators(PDFLib.PDFOperator.of('q'),
   PDFLib.PDFOperator.of('cm',[num(0),num(height),num(-width),num(0),num(x+width),num(y)]),
   PDFLib.PDFOperator.of('Do',[name]),PDFLib.PDFOperator.of('Q'));
-}
-// Set this to your deployed Render service URL, without a trailing slash.
-const ICC_CONVERTER_URL = 'https://rinkboard-icc-converter.onrender.com';
-async function convertProductionPdfWithICC(pdfBytes){
- if(ICC_CONVERTER_URL.includes('REPLACE-WITH-YOUR-RENDER-URL'))
-  throw Error('ICC converter is not configured. Deploy render-service and set ICC_CONVERTER_URL in index.html. V67 remains your working production version.');
- const form=new FormData();form.append('file',new Blob([pdfBytes],{type:'application/pdf'}),'production.pdf');
- const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),240000);
- try{
-  const response=await fetch(ICC_CONVERTER_URL+'/convert',{method:'POST',body:form,signal:controller.signal});
-  if(!response.ok){let message='ICC conversion failed ('+response.status+')';try{const obj=await response.json();message=obj.error||message}catch(e){}throw Error(message)}
-  return new Uint8Array(await response.arrayBuffer());
- }finally{clearTimeout(timeout)}
 }
 async function imposedProductionPdf(targetDoc=null,layerRefs=null){
  if(!window.PDFLib)throw Error('PDF library did not load');
@@ -427,9 +417,9 @@ async function imposedProductionPdf(targetDoc=null,layerRefs=null){
   markProductionLayer(page,'ThruCut',false);
  }
  if(!targetDoc)cleanUnusedProductionFonts(output);
- return targetDoc?output:await convertProductionPdfWithICC(await output.save());
+ return targetDoc?output:await output.save();
 }
-async function allPdf(proof){syncBoard();let restore=activeBoard;try{status('Exporting '+boards.length+' rinkboards…');let merged=await PDFLib.PDFDocument.create();let layers=proof?null:productionLayers(merged);for(let i=0;i<boards.length;i++){activeBoard=i;applyBoard(boards[i]);if(proof){let bytes=await makePdf(true);let doc=await PDFLib.PDFDocument.load(bytes);let pages=await merged.copyPages(doc,doc.getPageIndices());pages.forEach(page=>merged.addPage(page))}else{await imposedProductionPdf(merged,layers)}}if(!proof)cleanUnusedProductionFonts(merged);let bytes=proof?await merged.save():await convertProductionPdfWithICC(await merged.save());fileDownload(new Blob([bytes],{type:'application/pdf'}),`BlastMedia_${boards.length}_rinkboards_${proof?'proofs':'production'}.pdf`);status(`Exported ${boards.length} rinkboards in one ${proof?'proof':'production'} PDF`)}catch(e){console.error(e);status('Batch export failed: '+e.message)}finally{activeBoard=restore;applyBoard(boards[restore]);refreshBoardSelect()}}
+async function allPdf(proof){syncBoard();let restore=activeBoard;try{status('Exporting '+boards.length+' rinkboards…');let merged=await PDFLib.PDFDocument.create();let layers=proof?null:productionLayers(merged);for(let i=0;i<boards.length;i++){activeBoard=i;applyBoard(boards[i]);if(proof){let bytes=await makePdf(true);let doc=await PDFLib.PDFDocument.load(bytes);let pages=await merged.copyPages(doc,doc.getPageIndices());pages.forEach(page=>merged.addPage(page))}else{await imposedProductionPdf(merged,layers)}}if(!proof)cleanUnusedProductionFonts(merged);let bytes=await merged.save();fileDownload(new Blob([bytes],{type:'application/pdf'}),`BlastMedia_${boards.length}_rinkboards_${proof?'proofs':'production'}.pdf`);status(`Exported ${boards.length} rinkboards in one ${proof?'proof':'production'} PDF`)}catch(e){console.error(e);status('Batch export failed: '+e.message)}finally{activeBoard=restore;applyBoard(boards[restore]);refreshBoardSelect()}}
 $('exportAllProof').onclick=()=>allPdf(true);$('exportAllPrint').onclick=()=>allPdf(false);
 document.querySelectorAll('.export-menu .project-menu-items button').forEach(btn=>btn.addEventListener('click',()=>{document.querySelector('.export-menu').open=false}));
 
@@ -634,7 +624,7 @@ doc.setDrawColor(75,75,75);doc.rect(left,top,boardW,boardH);doc.setFont('helveti
 }else{
   let v=productionSvgNode();v.setAttribute('width',String(boardW));v.setAttribute('height',String(boardH));
   await doc.svg(v,{x:left,y:top,width:boardW,height:boardH});
-}let output=await PDFLib.PDFDocument.load(doc.output('arraybuffer'));let page=output.getPages()[0];for(let l of layers.filter(x=>x.type==='pdf'&&x.originalPdf)){let bytes=Uint8Array.from(atob(l.originalPdf.split(',')[1]),c=>c.charCodeAt(0));let imported=await output.embedPdf(bytes,[0]);let embedded=imported[0],factor=boardW/W();page.drawPage(embedded,{x:left+l.x*factor,y:ph+header+footer-(top+(l.y+l.h)*factor),width:l.w*factor,height:l.h*factor,rotate:PDFLib.degrees(-(l.rotation||0))})}return await output.save()}async function pdfAction(proof){try{status('Generating '+(proof?'proof':'production')+' PDF…');let bytes=proof?await makePdf(true):await imposedProductionPdf();fileDownload(new Blob([bytes],{type:'application/pdf'}),safeName()+(proof?'_proof.pdf':'_production.pdf'));status(proof?'Proof PDF downloaded.':'ICC CMYK Production PDF downloaded. Check spot colour, dimensions and print quality before production.') }catch(err){console.error(err);status('PDF export failed: '+err.message)}}$('proofPdf').onclick=()=>pdfAction(true);$('printPdf').onclick=()=>pdfAction(false);
+}let output=await PDFLib.PDFDocument.load(doc.output('arraybuffer'));let page=output.getPages()[0];for(let l of layers.filter(x=>x.type==='pdf'&&x.originalPdf)){let bytes=Uint8Array.from(atob(l.originalPdf.split(',')[1]),c=>c.charCodeAt(0));let imported=await output.embedPdf(bytes,[0]);let embedded=imported[0],factor=boardW/W();page.drawPage(embedded,{x:left+l.x*factor,y:ph+header+footer-(top+(l.y+l.h)*factor),width:l.w*factor,height:l.h*factor,rotate:PDFLib.degrees(-(l.rotation||0))})}return await output.save()}async function pdfAction(proof){try{status('Generating '+(proof?'proof':'production')+' PDF…');let bytes=proof?await makePdf(true):await imposedProductionPdf();fileDownload(new Blob([bytes],{type:'application/pdf'}),safeName()+(proof?'_proof.pdf':'_production.pdf'));status(proof?'Proof PDF downloaded.':'CMYK Production PDF downloaded. Check spot colour, dimensions and print quality before production.') }catch(err){console.error(err);status('PDF export failed: '+err.message)}}$('proofPdf').onclick=()=>pdfAction(true);$('printPdf').onclick=()=>pdfAction(false);
 window.RinkboardBridge={getProject(){syncBoard();return clone({version:2,boards,activeBoard})},openProject(obj){if(!obj||obj.version!==2||!Array.isArray(obj.boards)||!obj.boards.length)throw Error('Invalid rinkboard project');boards=clone(obj.boards);activeBoard=Math.min(Math.max(0,obj.activeBoard||0),boards.length-1);applyBoard(boards[activeBoard]);refreshBoardSelect();status('Dropbox project opened')},getBoardPreview(i){syncBoard();const original=activeBoard;try{activeBoard=i;applyBoard(boards[i]);return svgText(exportSvgNode(true))}finally{activeBoard=original;applyBoard(boards[original]);refreshBoardSelect()}},async getBoardProductionPdf(i){syncBoard();const original=activeBoard,scaleInput=$('scale'),oldScale=scaleInput.value,bleedInput=$('bleed'),oldBleed=bleedInput.checked;try{activeBoard=i;applyBoard(boards[i]);scaleInput.value='1';bleedInput.checked=false;return await imposedProductionPdf()}finally{activeBoard=original;applyBoard(boards[original]);scaleInput.value=oldScale;bleedInput.checked=oldBleed;refreshBoardSelect()}},async exportDatabaseSelection(savedBoards,proof){
  syncBoard();const snapshot=clone({version:2,boards,activeBoard});
  try{
@@ -648,7 +638,7 @@ window.RinkboardBridge={getProject(){syncBoard();return clone({version:2,boards,
     const pages=await output.copyPages(doc,doc.getPageIndices());pages.forEach(page=>output.addPage(page));
    }else await imposedProductionPdf(output,layerRefs);
   }
-  return proof?await output.save():await convertProductionPdfWithICC(await output.save());
+  return await output.save();
  }finally{boards=snapshot.boards;activeBoard=snapshot.activeBoard;applyBoard(boards[activeBoard]);refreshBoardSelect()}
 },selectBoard(i){selectBoard(i)}};selected=null;layers=[];undo=[];redo=[];draw();boards=[captureBoard()];refreshBoardSelect();document.querySelectorAll('.project-menu-items button').forEach(b=>b.addEventListener('click',()=>document.querySelector('.project-menu').open=false));})();
 </script><div id="dbOverlay" hidden><section id="dbPanel" role="dialog" aria-modal="true" aria-label="Rinkboard Database"><header><h2>Rinkboard Database</h2><div style="display:flex;gap:8px;align-items:center"><span id="dbStatus">Not connected</span><button id="dbConnect" class="dbPrimary">Connect Dropbox</button><button id="dbClose" aria-label="Close database">✕</button></div></header><div id="dbControls"><label>Team<select id="dbTeam"><option value="">All teams</option></select></label><label>Season<select id="dbSeason"><option value="">All seasons</option></select></label><label>Board size<select id="dbSize"><option value="all">All sizes</option></select></label><label>Search<input id="dbSearch" placeholder="Sponsor name"></label><button id="dbRefresh">Refresh</button><button id="dbSave" class="dbPrimary">Save Current Artboard</button><button id="dbSaveAll">Save All Artboards</button></div><div id="dbBody"><div id="dbSetup"><label>Dropbox App Key<input id="dbAppKey" placeholder="App key (public)"></label><label>Shared folder path<input id="dbFolder" placeholder="/Rinkboard Database"></label><button id="dbApply">Save Settings</button><p>Create a Dropbox API app with <strong>Scoped access / Full Dropbox</strong>, enable <strong>files.metadata.read, files.content.read, files.content.write</strong>, and register this website's exact URL as an OAuth redirect URI. The shared folder must already be accessible in each employee's Dropbox. This app never asks for your password or app secret.</p><p>Use HTTPS (GitHub Pages) for Dropbox sign-in. Changes made by others appear after Refresh. A revision check warns about conflicting edits.</p></div><div id="dbExportBar" style="padding:12px 16px;border-bottom:1px solid #bbb;display:flex;flex-wrap:wrap;align-items:center;gap:12px">
