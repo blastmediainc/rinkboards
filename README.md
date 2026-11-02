@@ -77,3 +77,5 @@ V38: Improved Blast Media logo embedding in band PDF exports.
 V39: Restored the Blast Media Print header logo with a validated, optimized embedded PNG.
 
 V40: Proof builder header logo now uses the same embedded, verified Blast Media Print PNG as the main app header.
+
+V42: Fix band vector PDF export by using jsPDF svg plugin method.

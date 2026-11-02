@@ -51,14 +51,14 @@ async function exportBand(){
  center('SHIPPED '+formatMonth($('bandMonth').value),1021,59,16);
  doc.setDrawColor(17,17,17);doc.setLineWidth(1.5);doc.rect(853,80,329,72);
  if(boardSvg){
-   if(!window.svg2pdf)throw Error('Vector PDF library unavailable. Reload the page.');
+   if(typeof doc.svg!=='function')throw Error('Vector PDF plugin unavailable. Reload the page.');
    const parser=new DOMParser();const svg=parser.parseFromString(boardSvg,'image/svg+xml').documentElement;
    if(svg.localName!=='svg'||svg.querySelector('parsererror'))throw Error('Invalid rinkboard SVG');
    const vb=(svg.getAttribute('viewBox')||'').trim().split(/[ ,]+/).map(Number);
    let sw=vb.length===4&&vb[2]>0?vb[2]:parseFloat(svg.getAttribute('width'))||313;
    let sh=vb.length===4&&vb[3]>0?vb[3]:parseFloat(svg.getAttribute('height'))||62;
    const scale=Math.min(313/sw,62/sh);
-   await window.svg2pdf(svg,doc,{x:861+(313-sw*scale)/2,y:85+(62-sh*scale)/2,width:sw*scale,height:sh*scale});
+   await doc.svg(svg,{x:861+(313-sw*scale)/2,y:85+(62-sh*scale)/2,width:sw*scale,height:sh*scale});
  }
  center($('bandSeason').value.trim().toUpperCase()+' SEASON',1021,199,17);
  return doc;
