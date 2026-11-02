@@ -311,13 +311,14 @@ async function makeFlattenedCmykArtwork(output,source,trimWidth,trimHeight){
  try{
   const pg=await pdf.getPage(1),vp=pg.getViewport({scale:1});
   // 100 DPI, with a memory safety cap. Large boards may be rendered at lower DPI.
-  const scale=Math.min(100/72,Math.sqrt(40000000/(vp.width*vp.height)));
+  const scale=Math.min(100/72,Math.sqrt(8000000/(vp.width*vp.height)));
   const view=pg.getViewport({scale});
   const canvas=document.createElement('canvas');canvas.width=Math.ceil(view.width);canvas.height=Math.ceil(view.height);
   const ctx=canvas.getContext('2d',{willReadFrequently:true});
   if(!ctx)throw Error('Could not create artwork rendering canvas');
   ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);
   await pg.render({canvasContext:ctx,viewport:view,background:'rgb(255,255,255)'}).promise;
+  // Cap raster size to reduce call-stack/memory pressure during PDF serialization.
   const pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data;
   const bytes=new Uint8Array(canvas.width*canvas.height*4);
   for(let i=0,j=0;i<pixels.length;i+=4,j+=4){
@@ -620,7 +621,7 @@ doc.setDrawColor(75,75,75);doc.rect(left,top,boardW,boardH);doc.setFont('helveti
 }else{
   let v=productionSvgNode();v.setAttribute('width',String(boardW));v.setAttribute('height',String(boardH));
   await doc.svg(v,{x:left,y:top,width:boardW,height:boardH});
-}let output=await PDFLib.PDFDocument.load(doc.output('arraybuffer'));let page=output.getPages()[0];for(let l of layers.filter(x=>x.type==='pdf'&&x.originalPdf)){let bytes=Uint8Array.from(atob(l.originalPdf.split(',')[1]),c=>c.charCodeAt(0));let imported=await output.embedPdf(bytes,[0]);let embedded=imported[0],factor=boardW/W();page.drawPage(embedded,{x:left+l.x*factor,y:ph+header+footer-(top+(l.y+l.h)*factor),width:l.w*factor,height:l.h*factor,rotate:PDFLib.degrees(-(l.rotation||0))})}return await output.save()}async function pdfAction(proof){try{status('Generating '+(proof?'proof':'production')+' PDF…');let bytes=proof?await makePdf(true):await imposedProductionPdf();fileDownload(new Blob([bytes],{type:'application/pdf'}),safeName()+(proof?'_proof.pdf':'_production.pdf'));status(proof?'Proof PDF downloaded.':'CMYK flattened Production PDF downloaded. Verify the cut spot in Acrobat Output Preview before printing.') }catch(err){console.error(err);status('PDF export failed: '+err.message)}}$('proofPdf').onclick=()=>pdfAction(true);$('printPdf').onclick=()=>pdfAction(false);
+}let output=await PDFLib.PDFDocument.load(doc.output('arraybuffer'));let page=output.getPages()[0];for(let l of layers.filter(x=>x.type==='pdf'&&x.originalPdf)){let bytes=Uint8Array.from(atob(l.originalPdf.split(',')[1]),c=>c.charCodeAt(0));let imported=await output.embedPdf(bytes,[0]);let embedded=imported[0],factor=boardW/W();page.drawPage(embedded,{x:left+l.x*factor,y:ph+header+footer-(top+(l.y+l.h)*factor),width:l.w*factor,height:l.h*factor,rotate:PDFLib.degrees(-(l.rotation||0))})}return await output.save()}async function pdfAction(proof){try{status('Generating '+(proof?'proof':'production')+' PDF…');let bytes=proof?await makePdf(true):await imposedProductionPdf();fileDownload(new Blob([bytes],{type:'application/pdf'}),safeName()+(proof?'_proof.pdf':'_production.pdf'));status(proof?'Proof PDF downloaded.':'CMYK Production PDF downloaded. Verify artwork resolution and cut spot in Acrobat Output Preview before printing.') }catch(err){console.error(err);status('PDF export failed: '+err.message)}}$('proofPdf').onclick=()=>pdfAction(true);$('printPdf').onclick=()=>pdfAction(false);
 window.RinkboardBridge={getProject(){syncBoard();return clone({version:2,boards,activeBoard})},openProject(obj){if(!obj||obj.version!==2||!Array.isArray(obj.boards)||!obj.boards.length)throw Error('Invalid rinkboard project');boards=clone(obj.boards);activeBoard=Math.min(Math.max(0,obj.activeBoard||0),boards.length-1);applyBoard(boards[activeBoard]);refreshBoardSelect();status('Dropbox project opened')},getBoardPreview(i){syncBoard();const original=activeBoard;try{activeBoard=i;applyBoard(boards[i]);return svgText(exportSvgNode(true))}finally{activeBoard=original;applyBoard(boards[original]);refreshBoardSelect()}},async getBoardProductionPdf(i){syncBoard();const original=activeBoard,scaleInput=$('scale'),oldScale=scaleInput.value,bleedInput=$('bleed'),oldBleed=bleedInput.checked;try{activeBoard=i;applyBoard(boards[i]);scaleInput.value='1';bleedInput.checked=false;return await imposedProductionPdf()}finally{activeBoard=original;applyBoard(boards[original]);scaleInput.value=oldScale;bleedInput.checked=oldBleed;refreshBoardSelect()}},async exportDatabaseSelection(savedBoards,proof){
  syncBoard();const snapshot=clone({version:2,boards,activeBoard});
  try{
@@ -644,7 +645,7 @@ window.RinkboardBridge={getProject(){syncBoard();return clone({version:2,boards,
 <label style="display:inline-flex;align-items:center;gap:6px">Proof contact <input id="dbExportContact" type="text" placeholder="Contact name (optional)" style="width:185px;max-width:100%;padding:6px" aria-label="Contact name for exported proofs"></label>
 <button id="dbDeleteSelected" type="button" style="color:#a12323;border:1px solid #c76b6b;background:#fff" title="Delete selected rinkboards from Dropbox">Delete selected</button><button id="dbBandGenerate" class="dbPrimary" type="button" onclick="RinkboardBands.open('database')">Generate Band</button><button id="dbExportSelected" class="dbPrimary" type="button">Export selected</button>
 <small style="flex-basis:100%">Exports a separate named PDF for each selected artboard and format. Contact name is applied to proofs only. The editor and saved database entries stay unchanged.</small>
-</div><div id="dbGrid"></div></div><div id="dbMessage" role="status">Configure Dropbox to start. Your existing local project save/open remains available.</div></section></div><script src="dropbox-database.js?v=50"></script><script src="band-generator.js?v=63"></script>
+</div><div id="dbGrid"></div></div><div id="dbMessage" role="status">Configure Dropbox to start. Your existing local project save/open remains available.</div></section></div><script src="dropbox-database.js?v=69"></script><script src="band-generator.js?v=63"></script>
 <script id="database-clean-layout-v45">
 (function(){
   const controls=document.getElementById('dbControls'), bar=document.getElementById('dbExportBar');
