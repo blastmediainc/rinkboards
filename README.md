@@ -93,3 +93,5 @@ V54: production thru cut is a named PDF Separation spot colour (ThruCut), altern
 V55: fix spot-colour PDF export crash when page resources have no ColorSpace dictionary. Uses optional lookup and creates it when missing.
 
 V56: production PDF trim sheet and spot cut path use exact 72 pt/in from user-entered width and 30-inch height, independent of imported PDF page rounding.
+
+V58 experimental Illustrator-compatible PDF: directly inlines source PDF page content into imposed production pages rather than using a single nested Form XObject. Thru Cut OCG above Artwork. Requires browser and Illustrator verification; no guarantee of native Illustrator layers.

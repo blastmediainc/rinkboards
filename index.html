@@ -285,17 +285,48 @@ async function imposedProductionPdf(targetDoc=null,layerRefs=null){
  if(!Number.isFinite(trimWidth)||trimWidth<=0)throw Error('Invalid rinkboard width');
  const output=targetDoc||await PDFLib.PDFDocument.create();
  const layers=layerRefs||productionLayers(output);
- const [embedded]=await output.embedPdf(source,[0]);
+ // Illustrator compatibility: copy page artwork resources and inline its
+ // content operators into each imposed page instead of nesting a PDF Form XObject.
+ const [copiedSource]=await output.copyPages(input,[0]);
+ const sourceResources=copiedSource.node.Resources();
+ const sourceContents=copiedSource.node.Contents();
+ const srcStreams=[];
+ function decodeContent(ref){
+  const obj=output.context.lookup(ref);
+  if(obj instanceof PDFLib.PDFArray){
+   for(let i=0;i<obj.size();i++)decodeContent(obj.get(i));
+  }else if(obj instanceof PDFLib.PDFRawStream){
+   srcStreams.push(PDFLib.decodePDFRawStream(obj).decode());
+  }else if(obj instanceof PDFLib.PDFContentStream){
+   srcStreams.push(obj.getUnencodedContents());
+  }else throw Error('Unsupported artwork content stream for Illustrator-compatible PDF');
+ }
+ decodeContent(sourceContents);
+ const encoder=new TextEncoder();
+ const sourceBytes=srcStreams.reduce((all,bytes)=>{
+  const next=new Uint8Array(all.length+bytes.length+1);
+  next.set(all);next.set(bytes,all.length);next[next.length-1]=10;return next;
+ },new Uint8Array());
+ function inlineArtwork(page,count){
+  const chunks=[];
+  for(let j=0;j<count;j++){
+   const sx=trimHeight/sourceHeight,sy=trimWidth/sourceWidth;
+   chunks.push(encoder.encode('q\n/OC /Artwork BDC\n'+
+     '0 '+sx+' '+(-sy)+' 0 '+(trimHeight*(j+1))+' 0 cm\n'));
+   chunks.push(sourceBytes);
+   chunks.push(encoder.encode('\nEMC\nQ\n'));
+  }
+  const size=chunks.reduce((n,a)=>n+a.length,0),bytes=new Uint8Array(size);
+  let pos=0;for(const a of chunks){bytes.set(a,pos);pos+=a.length}
+  page.node.set(PDFLib.PDFName.of('Contents'),output.context.register(output.context.flateStream(bytes)));
+ }
  for(let offset=0;offset<qty;offset+=2){
   const count=Math.min(2,qty-offset);
   const page=output.addPage([trimHeight*count,trimWidth]);
+  page.node.set(PDFLib.PDFName.of('Resources'),sourceResources);
   const resources=page.node.normalizedEntries().Resources;
   resources.set(PDFLib.PDFName.of('Properties'),output.context.obj({Artwork:layers.art,ThruCut:layers.cut}));
-  markProductionLayer(page,'Artwork',true);
-  for(let j=0;j<count;j++){
-   page.drawPage(embedded,{x:trimHeight*(j+1),y:0,width:trimWidth,height:trimHeight,rotate:PDFLib.degrees(90)});
-  }
-  markProductionLayer(page,'Artwork',false);
+  inlineArtwork(page,count);
   // True named spot ink (Separation colour space), with RGB 0/0/255 as
   // its alternate screen representation. This remains a spot ink in PDF.
   const cutFn=output.context.register(output.context.obj({
