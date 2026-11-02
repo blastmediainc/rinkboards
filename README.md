@@ -51,3 +51,7 @@ PDF-compatible Adobe Illustrator `.ai` files can be uploaded directly; their PDF
 ## Saving from the builder
 
 Choose **Team** and **Season / Year** from the builder sidebar, then click **Save to Database** in the top toolbar. The dropdowns show existing Dropbox folders and offer **+ Add new** to create a team or season. The active artboard is saved with its editable project and production PDF. Connect Dropbox in the Database panel first.
+
+## Database previews
+
+Hover over or focus a rinkboard name in the database to see its saved artwork preview at approximately 10% physical scale (subject to screen fitting). Previews are fetched from Dropbox on demand; the name-only database listing remains unchanged.
