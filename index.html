@@ -278,17 +278,22 @@ async function imposedProductionPdf(targetDoc=null,layerRefs=null){
  const input=await PDFLib.PDFDocument.load(source);
  const sourcePage=input.getPages()[0];
  const sourceWidth=sourcePage.getWidth(),sourceHeight=sourcePage.getHeight();
+ // Derive production trim dimensions from the builder's actual inch settings,
+ // never from a PDF importer/viewer's slightly expanded page bounds.
+ const trimWidth=Number($('width').value)*72;
+ const trimHeight=30*72;
+ if(!Number.isFinite(trimWidth)||trimWidth<=0)throw Error('Invalid rinkboard width');
  const output=targetDoc||await PDFLib.PDFDocument.create();
  const layers=layerRefs||productionLayers(output);
  const [embedded]=await output.embedPdf(source,[0]);
  for(let offset=0;offset<qty;offset+=2){
   const count=Math.min(2,qty-offset);
-  const page=output.addPage([sourceHeight*count,sourceWidth]);
+  const page=output.addPage([trimHeight*count,trimWidth]);
   const resources=page.node.normalizedEntries().Resources;
   resources.set(PDFLib.PDFName.of('Properties'),output.context.obj({Artwork:layers.art,ThruCut:layers.cut}));
   markProductionLayer(page,'Artwork',true);
   for(let j=0;j<count;j++){
-   page.drawPage(embedded,{x:sourceHeight*(j+1),y:0,width:sourceWidth,height:sourceHeight,rotate:PDFLib.degrees(90)});
+   page.drawPage(embedded,{x:trimHeight*(j+1),y:0,width:trimWidth,height:trimHeight,rotate:PDFLib.degrees(90)});
   }
   markProductionLayer(page,'Artwork',false);
   // True named spot ink (Separation colour space), with RGB 0/0/255 as
@@ -313,13 +318,13 @@ async function imposedProductionPdf(targetDoc=null,layerRefs=null){
    PDFLib.PDFOperator.of('SCN',[PDFLib.PDFNumber.of(1)]),
    op('w',[1]),
    // Full perimeter of the imposed print sheet, not just the middle.
-   op('m',[0,0]),op('l',[sourceHeight*count,0]),
-   op('l',[sourceHeight*count,sourceWidth]),op('l',[0,sourceWidth]),
+   op('m',[0,0]),op('l',[trimHeight*count,0]),
+   op('l',[trimHeight*count,trimWidth]),op('l',[0,trimWidth]),
    PDFLib.PDFOperator.of('h'),PDFLib.PDFOperator.of('S')
   );
   // Divider between adjacent boards, also in the same spot colour.
   if(count===2)page.pushOperators(
-   op('m',[sourceHeight,0]),op('l',[sourceHeight,sourceWidth]),
+   op('m',[trimHeight,0]),op('l',[trimHeight,trimWidth]),
    PDFLib.PDFOperator.of('S')
   );
   page.pushOperators(PDFLib.PDFOperator.of('Q'));
