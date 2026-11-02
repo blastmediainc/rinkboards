@@ -94,4 +94,8 @@ V55: fix spot-colour PDF export crash when page resources have no ColorSpace dic
 
 V56: production PDF trim sheet and spot cut path use exact 72 pt/in from user-entered width and 30-inch height, independent of imported PDF page rounding.
 
-V59: Export menu adds Illustrator Layered SVG (Current Artboard), with named Artwork and Thru Cut SVG layer groups, cut on top, exact page geometry, and one SVG per two-board sheet. SVG cut is RGB blue, not a real spot ink; assign ThruCut spot swatch in Illustrator. Illustrator native layer recognition is unverified. Embedded PDF artwork uses raster preview in SVG; existing production PDF retains PDF vectors and spot colour.
+V60 production workflow: Export > Production PDF downloads the layered source PDF; Illustrator must finalize it. File > Scripts > Other Script > Finalize-Production-PDF.jsx, select downloaded PDF. Saves _Illustrator.pdf with editable Artwork and Thru Cut native layers, spot ink and preserveEditability enabled. This is NOT silent browser-to-Illustrator automation. Validate geometry, spot ink and vector content before production.
+
+V61: Confirmed Illustrator Layered SVG export is absent. Production PDF and Illustrator finalizer remain.
+
+V62: Production PDFs remove unused inherited font resource dictionaries from graphics-only page/Form XObject streams, avoiding RIP Helvetica requests. Fonts in streams with PDF text objects or undecodable streams are retained. Both single and batch production exports use the cleanup; proof exports unchanged. Verify with printer RIP before live production.
