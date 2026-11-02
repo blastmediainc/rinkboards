@@ -22,7 +22,7 @@ ctx.strokeStyle='#111';ctx.lineWidth=1.5;ctx.strokeRect(853,80,329,72);
 if(boardData){try{drawFit(ctx,await image(boardData),861,85,313,62)}catch{}}
 ctx.font='bold 17px Lato,Arial,sans-serif';ctx.fillText($('bandSeason').value.trim().toUpperCase()+' SEASON',1021,193);
 }
-function svgToData(svg){return new Promise((resolve,reject)=>{const url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));const img=new Image();img.onload=()=>{try{const c=document.createElement('canvas');c.width=1200;c.height=300;const ctx=c.getContext('2d');ctx.drawImage(img,0,0,c.width,c.height);resolve(c.toDataURL('image/png'))}catch(e){reject(e)}finally{URL.revokeObjectURL(url)}};img.onerror=()=>{URL.revokeObjectURL(url);reject(Error('Board preview could not be rendered'))};img.src=url})}
+function svgToData(svg){return new Promise((resolve,reject)=>{const url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));const img=new Image();img.onload=()=>{try{const ratio=(img.naturalWidth||1200)/(img.naturalHeight||300);if(!Number.isFinite(ratio)||ratio<=0)throw Error('Invalid board preview dimensions');const c=document.createElement('canvas');c.width=2400;c.height=Math.max(1,Math.min(2400,Math.round(2400/ratio)));const ctx=c.getContext('2d',{alpha:false});ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(img,0,0,c.width,c.height);resolve(c.toDataURL('image/png'))}catch(e){reject(e)}finally{URL.revokeObjectURL(url)}};img.onerror=()=>{URL.revokeObjectURL(url);reject(Error('Board preview could not be rendered'))};img.src=url})}
 async function getBoard(){if(source==='builder'){const p=window.RinkboardBridge.getProject();const idx=p.activeBoard;board=p.boards[idx];if(!board)throw Error('No active board');return window.RinkboardBridge.getBoardPreview(idx)}const d=JSON.parse(await api().downloadText(selectedRecord.path));board=d.project?.boards?.[0];if(!board)throw Error('Invalid saved board');return api().downloadText(selectedRecord.path.replace(/\.rinkboard\.json$/i,'.preview.svg'))}
 async function loadTeamLogo(){logoData='';const t=$('bandTeam').value.trim();if(!t){status('Enter a team first');await render();return}try{logoData=await api().downloadLogo(filename(t)+'.png');status('Loaded '+filename(t)+'.png from Dropbox')}catch(e){status('No logo found for '+t+'. Upload a PNG to add one.')}await render()}
 async function open(from){source=from;selectedRecord=null;selectedBatch=[];logoData='';boardData='';boardSvg='';if(from==='builder'){team=$('builderTeam')?.value||'';season=$('builderSeason')?.value||''}else{const records=api().selectedRecords();if(!records.length){alert('Select one or more rinkboards in the Database to generate bands.');return}selectedBatch=records;selectedRecord=records[0];team=selectedRecord.team;season=selectedRecord.season}
@@ -94,24 +94,19 @@ async function exportBand(){
    cx.drawImage(logo,(c.width-iw)/2,(c.height-ih)/2,iw,ih);
    await fitImage(c.toDataURL('image/png'),505,17,204,55);
  }catch(e){console.warn('Blast Media brand image unavailable',e);throw Error('Blast Media logo could not be embedded in the PDF: '+e.message)}}
- if(logoData){try{await fitImage(logoData,525,92,170,119)}catch(e){console.warn('Team logo unavailable',e)}}
+ if(logoData){await fitImage(logoData,525,92,170,119)}
  center('RINKBOARDS ('+$('bandSize').value.trim()+')',1021,36,17);
  center('SHIPPED '+formatMonth($('bandMonth').value),1021,59,16);
  doc.setDrawColor(17,17,17);doc.setLineWidth(1.5);doc.rect(853,80,329,72);
- if(boardSvg){
-   const svgRenderer=typeof doc.svg==='function'?doc.svg.bind(doc):null;
-   const svg=flattenBandSvg(boardSvg);
-   if(svg.localName!=='svg'||svg.querySelector('parsererror'))throw Error('Invalid rinkboard SVG');
-   const vb=(svg.getAttribute('viewBox')||'').trim().split(/[ ,]+/).map(Number);
-   let sw=vb.length===4&&vb[2]>0?vb[2]:parseFloat(svg.getAttribute('width'))||313;
-   let sh=vb.length===4&&vb[3]>0?vb[3]:parseFloat(svg.getAttribute('height'))||62;
-   const scale=Math.min(313/sw,62/sh);
-   if(svgRenderer){try{await svgRenderer(svg,{x:861+(313-sw*scale)/2,y:85+(62-sh*scale)/2,width:sw*scale,height:sh*scale});}catch(err){console.error('Band SVG vector conversion failed',err);throw Error('Cannot render band artwork as vectors: '+err.message);}}else{throw Error('Vector PDF renderer did not load. Refresh the page and try again.');}
- }
+ // Color-accurate band preview. SVG-to-PDF conversion can alter CMYK/spot
+ // colors, gradients, clipping and embedded SVGs, or fail for some sponsors.
+ // Use the exact browser-rendered preview, at high resolution, in the PDF.
+ if(!boardData)throw Error('Board preview is missing. Reload the band before exporting.');
+ await fitImage(boardData,861,85,313,62);
  center($('bandSeason').value.trim().toUpperCase()+' SEASON',1021,199,17);
  return doc;
 }
-$('bandExport').onclick=async()=>{try{status('Creating vector PDF…');const doc=await exportBand();const name=[$('bandTeam').value,$('bandSponsor').value,'Band',formatMonth($('bandMonth').value)].map(x=>x.trim().replace(/[^a-z0-9-]+/gi,'_')).filter(Boolean).join('_');doc.save(name+'.pdf');status('Vector-first band PDF exported')}catch(e){status('Export failed: '+e.message);console.error(e)}};
-$('bandExportAll').onclick=async()=>{const button=$('bandExportAll');button.disabled=true;try{const list=selectedBatch.slice();const original=selectedRecord;let ok=0;for(let i=0;i<list.length;i++){selectedRecord=list[i];status('Generating band '+(i+1)+' of '+list.length+': '+selectedRecord.name);try{const svg=await getBoard();boardSvg=svg;boardData=await svgToData(svg);$('bandTeam').value=selectedRecord.team;$('bandSeason').value=selectedRecord.season;$('bandSize').value='30 x '+(board.settings?.width||selectedRecord.width||139);$('bandSponsor').value=board.settings?.sponsor||selectedRecord.name;await loadTeamLogo();const doc=await exportBand();const stem=[selectedRecord.team,selectedRecord.season,selectedRecord.name,selectedRecord.size,'Band'].map(x=>String(x||'').replace(/[^a-z0-9-]+/gi,'_')).filter(Boolean).join('_');doc.save(stem+'.pdf');ok++}catch(e){console.error('Band failed for '+selectedRecord.name,e);status('Failed '+selectedRecord.name+': '+e.message);break}}selectedRecord=original;status('Exported '+ok+' of '+list.length+' bands as separate PDFs. Check browser permission for multiple downloads.')}finally{button.disabled=false}};
+$('bandExport').onclick=async()=>{try{status('Creating colour-accurate PDF…');const doc=await exportBand();const name=[$('bandTeam').value,$('bandSponsor').value,'Band',formatMonth($('bandMonth').value)].map(x=>x.trim().replace(/[^a-z0-9-]+/gi,'_')).filter(Boolean).join('_');doc.save(name+'.pdf');status('Band PDF exported with colour-accurate artwork preview')}catch(e){status('Export failed: '+e.message);console.error(e)}};
+$('bandExportAll').onclick=async()=>{const button=$('bandExportAll');button.disabled=true;try{const list=selectedBatch.slice();const original=selectedRecord;let ok=0;const failed=[];for(let i=0;i<list.length;i++){selectedRecord=list[i];status('Generating band '+(i+1)+' of '+list.length+': '+selectedRecord.name);try{const svg=await getBoard();boardSvg=svg;boardData=await svgToData(svg);$('bandTeam').value=selectedRecord.team;$('bandSeason').value=selectedRecord.season;$('bandSize').value='30 x '+(board.settings?.width||selectedRecord.width||139);$('bandSponsor').value=board.settings?.sponsor||selectedRecord.name;await loadTeamLogo();const doc=await exportBand();const stem=[selectedRecord.team,selectedRecord.season,selectedRecord.name,selectedRecord.size,'Band'].map(x=>String(x||'').replace(/[^a-z0-9-]+/gi,'_')).filter(Boolean).join('_');doc.save(stem+'.pdf');ok++}catch(e){console.error('Band failed for '+selectedRecord.name,e);failed.push(selectedRecord.name+': '+e.message);status('Failed '+selectedRecord.name+': '+e.message)}}selectedRecord=original;status('Exported '+ok+' of '+list.length+' bands.'+(failed.length?' Failed: '+failed.join('; '):' Check browser permission for multiple downloads.'))}finally{button.disabled=false}};
 window.RinkboardBands={open};
 })();

@@ -99,3 +99,4 @@ V60 production workflow: Export > Production PDF downloads the layered source PD
 V61: Confirmed Illustrator Layered SVG export is absent. Production PDF and Illustrator finalizer remain.
 
 V62: Production PDFs remove unused inherited font resource dictionaries from graphics-only page/Form XObject streams, avoiding RIP Helvetica requests. Fonts in streams with PDF text objects or undecodable streams are retained. Both single and batch production exports use the cleanup; proof exports unchanged. Verify with printer RIP before live production.
+\nV63 Band Generator: switches board artwork in band PDFs to high-resolution, browser-rendered PNG to preserve visual colours, gradients and complex embedded SVG; fixes preview aspect ratio; no longer silently drops team logo; batch continues after per-band errors and reports failed names. Band artwork is raster in band PDF; text and border remain vector.\n
