@@ -30,6 +30,53 @@ $('bandExportAll').hidden=source!=='database'||selectedBatch.length<2;modal.hidd
 $('bandClose').onclick=()=>modal.hidden=true;modal.addEventListener('click',e=>{if(e.target===modal)modal.hidden=true});for(const id of ['bandTeam','bandSeason','bandSize','bandMonth','bandSponsor'])$(id).addEventListener('input',()=>{if(id==='bandTeam')logoData='';render()});$('bandReload').onclick=()=>loadTeamLogo();$('bandLogoUpload').onclick=()=>$('bandLogoFile').click();$('bandLogoFile').onchange=async()=>{const file=$('bandLogoFile').files[0];if(!file)return;try{if(file.type!=='image/png'&&!file.name.toLowerCase().endsWith('.png'))throw Error('Please select a PNG');if(file.size>10*1024*1024)throw Error('PNG must be smaller than 10 MB');const t=$('bandTeam').value.trim();if(!t)throw Error('Enter a team');await api().uploadLogo(filename(t)+'.png',file);status('Saved '+filename(t)+'.png to Dropbox');await loadTeamLogo()}catch(e){status(e.message)}finally{$('bandLogoFile').value=''}};
 // Vector-first PDF: text, outlines and SVG rinkboard stay vector; PNG logos retain their original pixels.
 async function rasterBoard(doc){if(!boardSvg)return;const svgBlob=new Blob([boardSvg],{type:'image/svg+xml'});const url=URL.createObjectURL(svgBlob);try{const img=await image(url);const c=document.createElement('canvas');c.width=2504;c.height=496;const ctx=c.getContext('2d');ctx.drawImage(img,0,0,c.width,c.height);doc.addImage(c.toDataURL('image/png'),'PNG',861,85,313,62)}finally{URL.revokeObjectURL(url)}}
+// Flatten nested Illustrator SVG images into vector elements before sending to svg2pdf.
+// This mirrors the production exporter fix: SVG data URI <image> elements render black in svg2pdf.
+function flattenBandSvg(markup){
+ const parser=new DOMParser(),doc=parser.parseFromString(markup,'image/svg+xml');
+ if(doc.querySelector('parsererror'))throw Error('Invalid band artwork SVG');
+ const root=doc.documentElement,NS='http://www.w3.org/2000/svg';
+ function inlineStyles(node){
+  const rules={};
+  for(const style of node.querySelectorAll('style')){
+   const css=style.textContent.replace(/\/\*[\s\S]*?\*\//g,'');
+   for(const m of css.matchAll(/([^{}]+)\{([^{}]+)\}/g)){
+    const props={};for(const decl of m[2].split(';')){const i=decl.indexOf(':');if(i>0)props[decl.slice(0,i).trim()]=decl.slice(i+1).trim()}
+    for(const selector of m[1].split(',')){const key=selector.trim();if(/^\.[\w-]+$/.test(key))rules[key.slice(1)]={...(rules[key.slice(1)]||{}),...props}}
+   }
+  }
+  const clone=node.cloneNode(true);
+  clone.querySelectorAll('style,script,foreignObject,iframe').forEach(el=>el.remove());
+  for(const el of [clone,...clone.querySelectorAll('*')]){
+   for(const cls of (el.getAttribute('class')||'').split(/\s+/))if(rules[cls])for(const [k,v] of Object.entries(rules[cls]))if(!el.hasAttribute(k))el.setAttribute(k,v);
+   el.removeAttribute('class');for(const attr of [...el.attributes])if(/^on/i.test(attr.name))el.removeAttribute(attr.name);
+  }
+  return clone;
+ }
+ for(const el of [...root.querySelectorAll('image')]){
+  const src=el.getAttribute('href')||el.getAttribute('xlink:href')||'';
+  if(!/^data:image\/svg\+xml/i.test(src))continue;
+  const split=src.indexOf(',');if(split<0)throw Error('Embedded SVG is missing image data');
+  const payload=src.slice(split+1),raw=/;base64/i.test(src.slice(0,split))?atob(payload):decodeURIComponent(payload);
+  const nested=parser.parseFromString(raw,'image/svg+xml');
+  if(nested.querySelector('parsererror'))throw Error('Embedded Illustrator SVG is invalid');
+  const original=nested.documentElement,clean=inlineStyles(original);
+  const vb=(original.getAttribute('viewBox')||'').trim().split(/[\s,]+/).map(Number);
+  const x=parseFloat(el.getAttribute('x'))||0,y=parseFloat(el.getAttribute('y'))||0;
+  const w=parseFloat(el.getAttribute('width'))||0,h=parseFloat(el.getAttribute('height'))||0;
+  if(!(w>0&&h>0))throw Error('Embedded SVG has invalid dimensions');
+  const vbx=vb.length===4&&vb.every(Number.isFinite)?vb[0]:0,vby=vb.length===4&&vb.every(Number.isFinite)?vb[1]:0;
+  const vbw=vb.length===4&&vb[2]>0?vb[2]:parseFloat(original.getAttribute('width'))||w;
+  const vbh=vb.length===4&&vb[3]>0?vb[3]:parseFloat(original.getAttribute('height'))||h;
+  const group=doc.createElementNS(NS,'g');
+  group.setAttribute('transform',`translate(${x} ${y}) scale(${w/vbw} ${h/vbh}) translate(${-vbx} ${-vby})`);
+  for(const child of [...clean.childNodes])if(child.nodeType===1)group.appendChild(doc.importNode(child,true));
+  // Keep the existing image's parent transforms, including rotation.
+  el.parentNode.replaceChild(group,el);
+ }
+ // Resolve CSS classes on the outer preview as well, so SVG-to-PDF can render fills.
+ return inlineStyles(root);
+}
 async function exportBand(){
  const {jsPDF}=window.jspdf;
  const doc=new jsPDF({orientation:'landscape',unit:'pt',format:[W,H],compress:true});
@@ -53,13 +100,13 @@ async function exportBand(){
  doc.setDrawColor(17,17,17);doc.setLineWidth(1.5);doc.rect(853,80,329,72);
  if(boardSvg){
    const svgRenderer=typeof doc.svg==='function'?doc.svg.bind(doc):null;
-   const parser=new DOMParser();const svg=parser.parseFromString(boardSvg,'image/svg+xml').documentElement;
+   const svg=flattenBandSvg(boardSvg);
    if(svg.localName!=='svg'||svg.querySelector('parsererror'))throw Error('Invalid rinkboard SVG');
    const vb=(svg.getAttribute('viewBox')||'').trim().split(/[ ,]+/).map(Number);
    let sw=vb.length===4&&vb[2]>0?vb[2]:parseFloat(svg.getAttribute('width'))||313;
    let sh=vb.length===4&&vb[3]>0?vb[3]:parseFloat(svg.getAttribute('height'))||62;
    const scale=Math.min(313/sw,62/sh);
-   if(svgRenderer){try{await svgRenderer(svg,{x:861+(313-sw*scale)/2,y:85+(62-sh*scale)/2,width:sw*scale,height:sh*scale});}catch(err){console.warn('SVG vector conversion failed; using high-resolution fallback',err);await rasterBoard(doc);}}else{await rasterBoard(doc);}
+   if(svgRenderer){try{await svgRenderer(svg,{x:861+(313-sw*scale)/2,y:85+(62-sh*scale)/2,width:sw*scale,height:sh*scale});}catch(err){console.error('Band SVG vector conversion failed',err);throw Error('Cannot render band artwork as vectors: '+err.message);}}else{throw Error('Vector PDF renderer did not load. Refresh the page and try again.');}
  }
  center($('bandSeason').value.trim().toUpperCase()+' SEASON',1021,199,17);
  return doc;
