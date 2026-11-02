@@ -302,6 +302,52 @@ function cleanUnusedProductionFonts(doc){
   if(xobjs instanceof PDFLib.PDFDict){for(const key of xobjs.keys())inspectStream(xobjs.get(key),res)}
  }
 }
+// V66: Flatten the source artwork into a process-CMYK image XObject.
+// This deliberately keeps the existing vector ThruCut construction separate.
+async function makeFlattenedCmykArtwork(output,source,trimWidth,trimHeight){
+ if(!window.pdfjsLib)throw Error('PDF rendering library unavailable');
+ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+ const pdf=await pdfjsLib.getDocument({data:new Uint8Array(source.slice(0))}).promise;
+ try{
+  const pg=await pdf.getPage(1),vp=pg.getViewport({scale:1});
+  // 100 DPI, with a memory safety cap. Large boards may be rendered at lower DPI.
+  const scale=Math.min(100/72,Math.sqrt(40000000/(vp.width*vp.height)));
+  const view=pg.getViewport({scale});
+  const canvas=document.createElement('canvas');canvas.width=Math.ceil(view.width);canvas.height=Math.ceil(view.height);
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  if(!ctx)throw Error('Could not create artwork rendering canvas');
+  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);
+  await pg.render({canvasContext:ctx,viewport:view,background:'rgb(255,255,255)'}).promise;
+  const pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+  const bytes=new Uint8Array(canvas.width*canvas.height*4);
+  for(let i=0,j=0;i<pixels.length;i+=4,j+=4){
+   const r=pixels[i]/255,g=pixels[i+1]/255,b=pixels[i+2]/255;
+   const k=1-Math.max(r,g,b),d=1-k;
+   bytes[j]=d>0?Math.round(255*(1-r-k)/d):0;
+   bytes[j+1]=d>0?Math.round(255*(1-g-k)/d):0;
+   bytes[j+2]=d>0?Math.round(255*(1-b-k)/d):0;
+   bytes[j+3]=Math.round(255*k);
+  }
+  const stream=output.context.flateStream(bytes,{
+   Type:PDFLib.PDFName.of('XObject'),Subtype:PDFLib.PDFName.of('Image'),
+   Width:PDFLib.PDFNumber.of(canvas.width),Height:PDFLib.PDFNumber.of(canvas.height),
+   ColorSpace:PDFLib.PDFName.of('DeviceCMYK'),BitsPerComponent:PDFLib.PDFNumber.of(8)
+  });
+  const ref=output.context.register(stream);
+  return {ref,width:canvas.width,height:canvas.height,dpi:scale*72};
+ }finally{await pdf.destroy()}
+}
+function drawFlattenedArtwork(output,page,img,x,y,width,height){
+ const res=page.node.normalizedEntries().Resources;
+ let xobjs=res.lookupMaybe(PDFLib.PDFName.of('XObject'),PDFLib.PDFDict);
+ if(!xobjs){xobjs=output.context.obj({});res.set(PDFLib.PDFName.of('XObject'),xobjs)}
+ const name=PDFLib.PDFName.of('CmykArt'+img.ref.objectNumber);
+ xobjs.set(name,img.ref);
+ const num=v=>PDFLib.PDFNumber.of(v);
+ page.pushOperators(PDFLib.PDFOperator.of('q'),
+  PDFLib.PDFOperator.of('cm',[num(0),num(height),num(-width),num(0),num(x+width),num(y)]),
+  PDFLib.PDFOperator.of('Do',[name]),PDFLib.PDFOperator.of('Q'));
+}
 async function imposedProductionPdf(targetDoc=null,layerRefs=null){
  if(!window.PDFLib)throw Error('PDF library did not load');
  const qty=Number($('qty').value);
@@ -321,7 +367,7 @@ async function imposedProductionPdf(targetDoc=null,layerRefs=null){
  if(!Number.isFinite(trimWidth)||trimWidth<=0)throw Error('Invalid rinkboard width');
  const output=targetDoc||await PDFLib.PDFDocument.create();
  const layers=layerRefs||productionLayers(output);
- const [embedded]=await output.embedPdf(source,[0]);
+ const cmykArt=await makeFlattenedCmykArtwork(output,source,trimWidth,trimHeight);
  for(let offset=0;offset<qty;offset+=2){
   const count=Math.min(2,qty-offset);
   const page=output.addPage([trimHeight*count,trimWidth]);
@@ -329,7 +375,7 @@ async function imposedProductionPdf(targetDoc=null,layerRefs=null){
   resources.set(PDFLib.PDFName.of('Properties'),output.context.obj({Artwork:layers.art,ThruCut:layers.cut}));
   markProductionLayer(page,'Artwork',true);
   for(let j=0;j<count;j++){
-   page.drawPage(embedded,{x:trimHeight*(j+1),y:0,width:trimWidth,height:trimHeight,rotate:PDFLib.degrees(90)});
+   drawFlattenedArtwork(output,page,cmykArt,trimHeight*j,0,trimHeight,trimWidth);
   }
   markProductionLayer(page,'Artwork',false);
   // True named spot ink (Separation colour space), with RGB 0/0/255 as
@@ -574,7 +620,7 @@ doc.setDrawColor(75,75,75);doc.rect(left,top,boardW,boardH);doc.setFont('helveti
 }else{
   let v=productionSvgNode();v.setAttribute('width',String(boardW));v.setAttribute('height',String(boardH));
   await doc.svg(v,{x:left,y:top,width:boardW,height:boardH});
-}let output=await PDFLib.PDFDocument.load(doc.output('arraybuffer'));let page=output.getPages()[0];for(let l of layers.filter(x=>x.type==='pdf'&&x.originalPdf)){let bytes=Uint8Array.from(atob(l.originalPdf.split(',')[1]),c=>c.charCodeAt(0));let imported=await output.embedPdf(bytes,[0]);let embedded=imported[0],factor=boardW/W();page.drawPage(embedded,{x:left+l.x*factor,y:ph+header+footer-(top+(l.y+l.h)*factor),width:l.w*factor,height:l.h*factor,rotate:PDFLib.degrees(-(l.rotation||0))})}return await output.save()}async function pdfAction(proof){try{status('Generating '+(proof?'proof':'production')+' PDF…');let bytes=proof?await makePdf(true):await imposedProductionPdf();fileDownload(new Blob([bytes],{type:'application/pdf'}),safeName()+(proof?'_proof.pdf':'_production.pdf'));status(proof?'Proof PDF downloaded.':'Production PDF downloaded. Run Finalize-Production-PDF.jsx in Illustrator to save the layered, editable PDF.') }catch(err){console.error(err);status('PDF export failed: '+err.message)}}$('proofPdf').onclick=()=>pdfAction(true);$('printPdf').onclick=()=>pdfAction(false);
+}let output=await PDFLib.PDFDocument.load(doc.output('arraybuffer'));let page=output.getPages()[0];for(let l of layers.filter(x=>x.type==='pdf'&&x.originalPdf)){let bytes=Uint8Array.from(atob(l.originalPdf.split(',')[1]),c=>c.charCodeAt(0));let imported=await output.embedPdf(bytes,[0]);let embedded=imported[0],factor=boardW/W();page.drawPage(embedded,{x:left+l.x*factor,y:ph+header+footer-(top+(l.y+l.h)*factor),width:l.w*factor,height:l.h*factor,rotate:PDFLib.degrees(-(l.rotation||0))})}return await output.save()}async function pdfAction(proof){try{status('Generating '+(proof?'proof':'production')+' PDF…');let bytes=proof?await makePdf(true):await imposedProductionPdf();fileDownload(new Blob([bytes],{type:'application/pdf'}),safeName()+(proof?'_proof.pdf':'_production.pdf'));status(proof?'Proof PDF downloaded.':'CMYK flattened Production PDF downloaded. Verify the cut spot in Acrobat Output Preview before printing.') }catch(err){console.error(err);status('PDF export failed: '+err.message)}}$('proofPdf').onclick=()=>pdfAction(true);$('printPdf').onclick=()=>pdfAction(false);
 window.RinkboardBridge={getProject(){syncBoard();return clone({version:2,boards,activeBoard})},openProject(obj){if(!obj||obj.version!==2||!Array.isArray(obj.boards)||!obj.boards.length)throw Error('Invalid rinkboard project');boards=clone(obj.boards);activeBoard=Math.min(Math.max(0,obj.activeBoard||0),boards.length-1);applyBoard(boards[activeBoard]);refreshBoardSelect();status('Dropbox project opened')},getBoardPreview(i){syncBoard();const original=activeBoard;try{activeBoard=i;applyBoard(boards[i]);return svgText(exportSvgNode(true))}finally{activeBoard=original;applyBoard(boards[original]);refreshBoardSelect()}},async getBoardProductionPdf(i){syncBoard();const original=activeBoard,scaleInput=$('scale'),oldScale=scaleInput.value,bleedInput=$('bleed'),oldBleed=bleedInput.checked;try{activeBoard=i;applyBoard(boards[i]);scaleInput.value='1';bleedInput.checked=false;return await imposedProductionPdf()}finally{activeBoard=original;applyBoard(boards[original]);scaleInput.value=oldScale;bleedInput.checked=oldBleed;refreshBoardSelect()}},async exportDatabaseSelection(savedBoards,proof){
  syncBoard();const snapshot=clone({version:2,boards,activeBoard});
  try{
