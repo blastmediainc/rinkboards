@@ -15,7 +15,7 @@ async function download(path){let res=await fetch(CONTENT+'/files/download',{met
 async function upload(path,content,rev,overwrite=false){let args={path,mode:rev?{'.tag':'update',update:rev}:overwrite?'overwrite':'add',autorename:false,mute:true,strict_conflict:true};let res=await fetch(CONTENT+'/files/upload',{method:'POST',headers:{Authorization:'Bearer '+ensure(),'Dropbox-API-Arg':JSON.stringify(args),'Content-Type':'application/octet-stream'},body:content});if(!res.ok){let t=await res.text();if(res.status===409)throw Error('Dropbox conflict: this file may have changed or already exist. Refresh the database before saving. '+t.slice(0,120));throw Error('Upload: '+t.slice(0,350))}return await res.json()}
 async function mkdir(path){try{await rpc('/files/create_folder_v2',{path,autorename:false})}catch(e){if(!String(e).includes('conflict'))throw e}}
 async function ensureFolders(path){let parts=path.split('/').filter(Boolean),curr='';for(let part of parts){curr+='/'+part;await mkdir(curr)}}
-function setBusy(b){busy=b;for(let id of ['dbSave','dbSaveAll','dbRefresh','dbConnect','dbExportSelected','builderDbSave'])$(id).disabled=b}
+function setBusy(b){busy=b;for(let id of ['dbSave','dbSaveAll','dbRefresh','dbConnect','dbExportSelected','dbDeleteSelected','builderDbSave'])$(id).disabled=b}
 async function perform(fn){if(busy)return;setBusy(true);try{await fn()}catch(e){console.error(e);message(e.message||String(e))}finally{setBusy(false)}}
 function applyConfig(){const nextKey=$('dbAppKey').value.trim(),nextFolder=$('dbFolder').value.trim().replace(/\/+$/,'')||'/Rinkboard Database';const changed=nextFolder!==config.folder||nextKey!==config.appKey;config.appKey=nextKey;config.folder=nextFolder;localStorage.setItem(cfgKey,JSON.stringify(config));if(changed){entries=[];selectedRecord=null;selectedPaths.clear();exportQuantities.clear();visibleRecords=[];render()}message('Settings saved. '+(expired()?'Connect Dropbox to authorize your account.':'Click Refresh to load the selected database.'))}
 function randomString(){let arr=crypto.getRandomValues(new Uint8Array(32));return Array.from(arr,b=>b.toString(16).padStart(2,'0')).join('')}
@@ -76,6 +76,26 @@ function render(){const team=$('dbTeam').value,season=$('dbSeason').value,size=$
 
 function updateSelectionCount(){const n=selectedPaths.size;$('dbSelectionCount').textContent=n+' selected';}
 function downloadPdf(bytes,name){const blob=new Blob([bytes],{type:'application/pdf'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000)}
+async function deleteSelected(){
+ if(expired())throw Error('Connect Dropbox before deleting.');
+ const chosen=entries.filter(e=>selectedPaths.has(e.path));
+ if(!chosen.length)throw Error('Select one or more rinkboards to delete using the checkboxes.');
+ const preview=chosen.slice(0,8).map(e=>`• ${e.team} / ${e.season} / ${e.size} / ${e.name}`).join('\n');
+ const extra=chosen.length>8?`\n…and ${chosen.length-8} more.`:'';
+ const answer=prompt(`PERMANENTLY DELETE ${chosen.length} selected rinkboard(s) from Dropbox?\n\n${preview}${extra}\n\nTheir saved artwork JSON, preview SVG and production PDF will be deleted. Team logos and team/season folders are not affected.\n\nType DELETE to confirm:`);
+ if(answer!=='DELETE'){message('Deletion cancelled.');return}
+ let removed=0,failed=[];
+ for(const record of chosen){
+  // Delete the primary record first. Only remove companion files if that succeeds.
+  try{await rpc('/files/delete_v2',{path:record.path});removed++;selectedPaths.delete(record.path);exportQuantities.delete(record.path);if(selectedRecord?.path===record.path)selectedRecord=null}
+  catch(err){failed.push(`${record.name}: ${err.message}`);continue}
+  for(const path of [record.path.replace(/\.rinkboard\.json$/i,'.preview.svg'),record.path.replace(/\.rinkboard\.json$/i,'.production-100pct.pdf')]){
+   try{await rpc('/files/delete_v2',{path})}catch(err){if(!String(err).includes('not_found'))failed.push(`${record.name} companion file: ${err.message}`)}
+  }
+ }
+ await refresh();
+ message(`Deleted ${removed} rinkboard(s) from Dropbox.${failed.length?' Some files could not be deleted: '+failed.slice(0,3).join(' | '):''}`);
+}
 async function exportSelected(){
  const proof=$('dbExportProof').checked,production=$('dbExportProduction').checked;
  if(!proof&&!production)throw Error('Choose Proof PDFs, Production PDFs, or both.');
@@ -173,5 +193,5 @@ window.RinkboardBandDropbox={
 $('builderDbSave').onclick=()=>perform(builderSave);
 $('builderTeam').addEventListener('change',()=>{if($('builderTeam').value==='__add__'){perform(()=>builderAddCategory('team'));return}$('builderSeason').value='';builderChoices();syncBuilderProjectSeason()});
 $('builderSeason').addEventListener('change',()=>{if($('builderSeason').value==='__add__'){perform(()=>builderAddCategory('season'));return}syncBuilderProjectSeason()});
-$('databaseOpen').onclick=()=>{$('dbOverlay').hidden=false;if(!expired()&&!entries.length)perform(refresh)};$('dbClose').onclick=()=>{hideHoverPreview();$('dbOverlay').hidden=true};$('dbOverlay').addEventListener('click',e=>{if(e.target===$('dbOverlay'))$('dbOverlay').hidden=true});$('dbAppKey').value=config.appKey;$('dbFolder').value=config.folder;$('dbApply').onclick=applyConfig;$('dbConnect').onclick=()=>perform(login);$('dbRefresh').onclick=()=>perform(refresh);$('dbSave').onclick=()=>perform(saveCurrent);$('dbSaveAll').onclick=()=>perform(saveAll);$('dbSelectVisible').onclick=()=>{visibleRecords.forEach(r=>selectedPaths.add(r.path));render()};$('dbClearSelection').onclick=()=>{selectedPaths.clear();render()};$('dbExportSelected').onclick=()=>perform(exportSelected);for(let id of ['dbTeam','dbSeason','dbSize'])$(id).addEventListener('change',()=>{if($(id).value==='__add__'){perform(()=>addCategory(id));return}if(id==='dbTeam'){$('dbSeason').value='';$('dbSize').value='all'}if(id==='dbSeason')$('dbSize').value='all';render()});$('dbSearch').addEventListener('input',render);if(!expired()){state('Connected');refresh().catch(e=>{console.error(e);message(e.message)})}completeOAuth().catch(e=>{console.error(e);message(e.message)});
+$('databaseOpen').onclick=()=>{$('dbOverlay').hidden=false;if(!expired()&&!entries.length)perform(refresh)};$('dbClose').onclick=()=>{hideHoverPreview();$('dbOverlay').hidden=true};$('dbOverlay').addEventListener('click',e=>{if(e.target===$('dbOverlay'))$('dbOverlay').hidden=true});$('dbAppKey').value=config.appKey;$('dbFolder').value=config.folder;$('dbApply').onclick=applyConfig;$('dbConnect').onclick=()=>perform(login);$('dbRefresh').onclick=()=>perform(refresh);$('dbSave').onclick=()=>perform(saveCurrent);$('dbSaveAll').onclick=()=>perform(saveAll);$('dbSelectVisible').onclick=()=>{visibleRecords.forEach(r=>selectedPaths.add(r.path));render()};$('dbClearSelection').onclick=()=>{selectedPaths.clear();render()};$('dbExportSelected').onclick=()=>perform(exportSelected);$('dbDeleteSelected').onclick=()=>perform(deleteSelected);for(let id of ['dbTeam','dbSeason','dbSize'])$(id).addEventListener('change',()=>{if($(id).value==='__add__'){perform(()=>addCategory(id));return}if(id==='dbTeam'){$('dbSeason').value='';$('dbSize').value='all'}if(id==='dbSeason')$('dbSize').value='all';render()});$('dbSearch').addEventListener('input',render);if(!expired()){state('Connected');refresh().catch(e=>{console.error(e);message(e.message)})}completeOAuth().catch(e=>{console.error(e);message(e.message)});
 })();

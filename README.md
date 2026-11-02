@@ -79,3 +79,8 @@ V39: Restored the Blast Media Print header logo with a validated, optimized embe
 V40: Proof builder header logo now uses the same embedded, verified Blast Media Print PNG as the main app header.
 
 V42: Fix band vector PDF export by using jsPDF svg plugin method.
+
+V43: Band generator supports multiple selected database rinkboards, exported as separate PDF downloads. Missing SVG PDF plugin falls back to high-resolution board raster.
+
+## Database deletion (V44)
+Select one or more rinkboards in Database and click **Delete selected**. Type `DELETE` to confirm. Deletes the selected `.rinkboard.json` records and associated `.preview.svg` and `.production-100pct.pdf` files from Dropbox; does not delete team logos or folders. Dropbox permissions must include `files.content.write`. Deletions affect all users of the shared database.
