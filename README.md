@@ -62,3 +62,8 @@ Hover over or focus a rinkboard name in the database to see its saved artwork pr
 Upload PDF-compatible Illustrator (.ai) files directly. Other AI and EPS files are automatically converted to PDF through the Blast Media Cloudflare Worker and CloudConvert before being placed on the board. Converted PDFs are kept as vector originals for production export where supported. Files are sent to the third-party conversion service; do not upload confidential assets without authorization. Conversion requires a working Worker deployment, CloudConvert API key and service availability.
 
 The site favicon is supplied as `favicon.png` and `favicon.ico` and uses the Blast Media icon from the app logo.
+
+
+## Packaging bands
+
+Use **Generate Band** on the Builder screen, or select exactly one database rinkboard and choose **Generate Band**. Bands export as 17 × 3.222 inches with a deliberately blank left wrap area. The shipment month defaults to the current month and can be changed before export. Team logos are shared via Dropbox under `/Rinkboard Database/Team Logos/`, named after the team with spaces removed (e.g. `AbbotsfordCanucks.png`). Use **Upload / replace team logo in Dropbox** in the Band Generator. Dropbox must be connected before loading or uploading logos. Band PDFs use a high-resolution raster composite of the layout, including the rinkboard preview.

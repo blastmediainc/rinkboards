@@ -164,6 +164,12 @@ let meta=await upload(path,JSON.stringify(payload),rev);try{let svg=window.Rinkb
 async function saveCurrent(){let ctx=context(),obj=window.RinkboardBridge.getProject(),name=await saveOne(obj.activeBoard,ctx);render();message(`Saved ${name} and its full-scale production PDF to Dropbox (${ctx.team} / ${ctx.season}).`)}
 async function saveAll(){let ctx=context(),obj=window.RinkboardBridge.getProject();let done=[];for(let i=0;i<obj.boards.length;i++){done.push(await saveOne(i,ctx))}render();message(`Saved ${done.length} artboards with full-scale production PDFs to ${ctx.team} / ${ctx.season}.`)}
 async function openRecord(record){let data=JSON.parse(await download(record.path));if(!data.project||!Array.isArray(data.project.boards))throw Error('This is not a valid Rinkboard Builder database entry');if(!confirm(`Open ${record.name} in the editor? Unsaved edits in the current project will be lost.`))return;window.RinkboardBridge.openProject(data.project);selectedRecord=record;$('dbTeam').value=record.team;$('dbSeason').value=record.season;builderChoices();$('builderTeam').value=record.team;builderChoices();$('builderSeason').value=record.season;syncBuilderProjectSeason();$('dbOverlay').hidden=true;message(`Opened ${record.name}. Save Current Artboard to update it in Dropbox.`)}
+window.RinkboardBandDropbox={
+ downloadText:download,
+ selectedRecords:()=>entries.filter(e=>selectedPaths.has(e.path)),
+ async downloadLogo(name){const path=base()+'/Team Logos/'+name;const res=await fetch(CONTENT+'/files/download',{method:'POST',headers:{Authorization:'Bearer '+ensure(),'Dropbox-API-Arg':JSON.stringify({path})}});if(!res.ok)throw Error('Team logo not found');const blob=await res.blob();return await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(blob)})},
+ async uploadLogo(name,file){await ensureFolders(base()+'/Team Logos');return upload(base()+'/Team Logos/'+name,file,null,true)}
+};
 $('builderDbSave').onclick=()=>perform(builderSave);
 $('builderTeam').addEventListener('change',()=>{if($('builderTeam').value==='__add__'){perform(()=>builderAddCategory('team'));return}$('builderSeason').value='';builderChoices();syncBuilderProjectSeason()});
 $('builderSeason').addEventListener('change',()=>{if($('builderSeason').value==='__add__'){perform(()=>builderAddCategory('season'));return}syncBuilderProjectSeason()});
