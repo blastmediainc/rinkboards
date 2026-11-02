@@ -1,0 +1,5 @@
+Flask==3.1.1
+flask-cors==5.0.1
+gunicorn==23.0.0
+pikepdf==9.11.0
+Pillow==11.1.0

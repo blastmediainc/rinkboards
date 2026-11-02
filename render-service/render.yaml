@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: rinkboard-icc-converter
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
