@@ -67,3 +67,6 @@ The site favicon is supplied as `favicon.png` and `favicon.ico` and uses the Bla
 ## Packaging bands
 
 Use **Generate Band** on the Builder screen, or select exactly one database rinkboard and choose **Generate Band**. Bands export as 17 × 3.222 inches with a deliberately blank left wrap area. The shipment month defaults to the current month and can be changed before export. Team logos are shared via Dropbox under `/Rinkboard Database/Team Logos/`, named after the team with spaces removed (e.g. `AbbotsfordCanucks.png`). Use **Upload / replace team logo in Dropbox** in the Band Generator. Dropbox must be connected before loading or uploading logos. Band PDFs use a high-resolution raster composite of the layout, including the rinkboard preview.
+
+
+V37: Band export uses vector PDF text/outlines and SVG rinkboard artwork. Uploaded PNG logos retain native resolution; raster elements in rinkboard SVG remain raster.
