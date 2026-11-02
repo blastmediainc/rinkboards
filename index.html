@@ -291,11 +291,39 @@ async function imposedProductionPdf(targetDoc=null,layerRefs=null){
    page.drawPage(embedded,{x:sourceHeight*(j+1),y:0,width:sourceWidth,height:sourceHeight,rotate:PDFLib.degrees(90)});
   }
   markProductionLayer(page,'Artwork',false);
-  if(count===2){
-   markProductionLayer(page,'ThruCut',true);
-   page.drawLine({start:{x:sourceHeight,y:0},end:{x:sourceHeight,y:sourceWidth},thickness:1,color:PDFLib.rgb(0,0,1)});
-   markProductionLayer(page,'ThruCut',false);
-  }
+  // True named spot ink (Separation colour space), with RGB 0/0/255 as
+  // its alternate screen representation. This remains a spot ink in PDF.
+  const cutFn=output.context.register(output.context.obj({
+   FunctionType:2,Domain:[0,1],C0:[0,0,0],C1:[0,0,1],N:1
+  }));
+  const spotSpace=output.context.register(output.context.obj([
+   PDFLib.PDFName.of('Separation'),
+   PDFLib.PDFName.of('ThruCut'),
+   PDFLib.PDFName.of('DeviceRGB'),
+   cutFn
+  ]));
+  let spaces=resources.lookup(PDFLib.PDFName.of('ColorSpace'),PDFLib.PDFDict);
+  if(!spaces){spaces=output.context.obj({});resources.set(PDFLib.PDFName.of('ColorSpace'),spaces)}
+  spaces.set(PDFLib.PDFName.of('CutSpot'),spotSpace);
+  const op=(name,values=[])=>PDFLib.PDFOperator.of(name,values.map(v=>PDFLib.PDFNumber.of(v)));
+  markProductionLayer(page,'ThruCut',true);
+  page.pushOperators(
+   PDFLib.PDFOperator.of('q'),
+   PDFLib.PDFOperator.of('CS',[PDFLib.PDFName.of('CutSpot')]),
+   PDFLib.PDFOperator.of('SCN',[PDFLib.PDFNumber.of(1)]),
+   op('w',[1]),
+   // Full perimeter of the imposed print sheet, not just the middle.
+   op('m',[0,0]),op('l',[sourceHeight*count,0]),
+   op('l',[sourceHeight*count,sourceWidth]),op('l',[0,sourceWidth]),
+   PDFLib.PDFOperator.of('h'),PDFLib.PDFOperator.of('S')
+  );
+  // Divider between adjacent boards, also in the same spot colour.
+  if(count===2)page.pushOperators(
+   op('m',[sourceHeight,0]),op('l',[sourceHeight,sourceWidth]),
+   PDFLib.PDFOperator.of('S')
+  );
+  page.pushOperators(PDFLib.PDFOperator.of('Q'));
+  markProductionLayer(page,'ThruCut',false);
  }
  return targetDoc?output:await output.save();
 }
