@@ -356,7 +356,7 @@ async function imposedProductionPdf(targetDoc=null,layerRefs=null){
  const scaleInput=$('scale'),bleedInput=$('bleed');
  const oldScale=scaleInput.value,oldBleed=bleedInput.checked;
  let source;
- try{scaleInput.value='1';bleedInput.checked=false;source=await makePdf(false)}
+ try{scaleInput.value='1';bleedInput.checked=false;source=await makePdf(false).catch(e=>{throw Error('Artwork preparation: '+e.message)})}
  finally{scaleInput.value=oldScale;bleedInput.checked=oldBleed}
  const input=await PDFLib.PDFDocument.load(source);
  const sourcePage=input.getPages()[0];
@@ -368,7 +368,7 @@ async function imposedProductionPdf(targetDoc=null,layerRefs=null){
  if(!Number.isFinite(trimWidth)||trimWidth<=0)throw Error('Invalid rinkboard width');
  const output=targetDoc||await PDFLib.PDFDocument.create();
  const layers=layerRefs||productionLayers(output);
- const cmykArt=await makeFlattenedCmykArtwork(output,source,trimWidth,trimHeight);
+ const cmykArt=await makeFlattenedCmykArtwork(output,source,trimWidth,trimHeight).catch(e=>{throw Error('CMYK raster conversion: '+e.message)});
  for(let offset=0;offset<qty;offset+=2){
   const count=Math.min(2,qty-offset);
   const page=output.addPage([trimHeight*count,trimWidth]);
@@ -620,7 +620,11 @@ doc.setDrawColor(75,75,75);doc.rect(left,top,boardW,boardH);doc.setFont('helveti
   doc.addImage(proofCanvas.toDataURL('image/png'),'PNG',left,top,boardW,boardH,undefined,'FAST');
 }else{
   let v=productionSvgNode();v.setAttribute('width',String(boardW));v.setAttribute('height',String(boardH));
-  await doc.svg(v,{x:left,y:top,width:boardW,height:boardH});
+  // V70: Avoid svg2pdf recursive traversal on complex uploaded SVG artwork.
+   // This is an intermediate RGB preview only; imposedProductionPdf subsequently
+   // renders and embeds a DeviceCMYK image, retaining separate spot cut vectors.
+   const safeCanvas=await renderProofBoardCanvas();
+   doc.addImage(safeCanvas.toDataURL('image/jpeg',0.94),'JPEG',left,top,boardW,boardH,undefined,'FAST');
 }let output=await PDFLib.PDFDocument.load(doc.output('arraybuffer'));let page=output.getPages()[0];for(let l of layers.filter(x=>x.type==='pdf'&&x.originalPdf)){let bytes=Uint8Array.from(atob(l.originalPdf.split(',')[1]),c=>c.charCodeAt(0));let imported=await output.embedPdf(bytes,[0]);let embedded=imported[0],factor=boardW/W();page.drawPage(embedded,{x:left+l.x*factor,y:ph+header+footer-(top+(l.y+l.h)*factor),width:l.w*factor,height:l.h*factor,rotate:PDFLib.degrees(-(l.rotation||0))})}return await output.save()}async function pdfAction(proof){try{status('Generating '+(proof?'proof':'production')+' PDF…');let bytes=proof?await makePdf(true):await imposedProductionPdf();fileDownload(new Blob([bytes],{type:'application/pdf'}),safeName()+(proof?'_proof.pdf':'_production.pdf'));status(proof?'Proof PDF downloaded.':'CMYK Production PDF downloaded. Verify artwork resolution and cut spot in Acrobat Output Preview before printing.') }catch(err){console.error(err);status('PDF export failed: '+err.message)}}$('proofPdf').onclick=()=>pdfAction(true);$('printPdf').onclick=()=>pdfAction(false);
 window.RinkboardBridge={getProject(){syncBoard();return clone({version:2,boards,activeBoard})},openProject(obj){if(!obj||obj.version!==2||!Array.isArray(obj.boards)||!obj.boards.length)throw Error('Invalid rinkboard project');boards=clone(obj.boards);activeBoard=Math.min(Math.max(0,obj.activeBoard||0),boards.length-1);applyBoard(boards[activeBoard]);refreshBoardSelect();status('Dropbox project opened')},getBoardPreview(i){syncBoard();const original=activeBoard;try{activeBoard=i;applyBoard(boards[i]);return svgText(exportSvgNode(true))}finally{activeBoard=original;applyBoard(boards[original]);refreshBoardSelect()}},async getBoardProductionPdf(i){syncBoard();const original=activeBoard,scaleInput=$('scale'),oldScale=scaleInput.value,bleedInput=$('bleed'),oldBleed=bleedInput.checked;try{activeBoard=i;applyBoard(boards[i]);scaleInput.value='1';bleedInput.checked=false;return await imposedProductionPdf()}finally{activeBoard=original;applyBoard(boards[original]);scaleInput.value=oldScale;bleedInput.checked=oldBleed;refreshBoardSelect()}},async exportDatabaseSelection(savedBoards,proof){
  syncBoard();const snapshot=clone({version:2,boards,activeBoard});
