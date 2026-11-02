@@ -43,3 +43,11 @@ Keep both files together in the same directory when publishing.
 - Dropbox access requires an appropriately configured Dropbox application and authorization from each user.
 - Browser settings may require permission for multiple downloads when exporting several artboards.
 - Before sending production files to print, verify the final PDF dimensions and named layers in your production software and confirm the cutter recognizes the blue centre line.
+
+### Illustrator and EPS logos
+
+PDF-compatible Adobe Illustrator `.ai` files can be uploaded directly; their PDF content is preserved as vector artwork in production exports. To use an EPS or legacy AI file, open it in Adobe Illustrator and save a PDF or SVG copy first. EPS PostScript cannot be reliably interpreted in a browser without a dedicated conversion engine. The Live Trace tool has been removed.
+
+## Saving from the builder
+
+Choose **Team** and **Season / Year** from the builder sidebar, then click **Save to Database** in the top toolbar. The dropdowns show existing Dropbox folders and offer **+ Add new** to create a team or season. The active artboard is saved with its editable project and production PDF. Connect Dropbox in the Database panel first.
