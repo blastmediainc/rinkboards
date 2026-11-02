@@ -89,3 +89,5 @@ Select one or more rinkboards in Database and click **Delete selected**. Type `D
 V48: Width changes automatically vertically center the artwork as a group; database size sections can be shown/hidden individually or all at once.
 
 V54: production thru cut is a named PDF Separation spot colour (ThruCut), alternate RGB 0/0/255, with full perimeter and inter-board divider on the thru cut optional-content layer.
+
+V55: fix spot-colour PDF export crash when page resources have no ColorSpace dictionary. Uses optional lookup and creates it when missing.

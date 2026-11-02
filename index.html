@@ -302,7 +302,7 @@ async function imposedProductionPdf(targetDoc=null,layerRefs=null){
    PDFLib.PDFName.of('DeviceRGB'),
    cutFn
   ]));
-  let spaces=resources.lookup(PDFLib.PDFName.of('ColorSpace'),PDFLib.PDFDict);
+  let spaces=resources.lookupMaybe(PDFLib.PDFName.of('ColorSpace'),PDFLib.PDFDict);
   if(!spaces){spaces=output.context.obj({});resources.set(PDFLib.PDFName.of('ColorSpace'),spaces)}
   spaces.set(PDFLib.PDFName.of('CutSpot'),spotSpace);
   const op=(name,values=[])=>PDFLib.PDFOperator.of(name,values.map(v=>PDFLib.PDFNumber.of(v)));
