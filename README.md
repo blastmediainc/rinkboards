@@ -94,4 +94,4 @@ V55: fix spot-colour PDF export crash when page resources have no ColorSpace dic
 
 V56: production PDF trim sheet and spot cut path use exact 72 pt/in from user-entered width and 30-inch height, independent of imported PDF page rounding.
 
-V58 experimental Illustrator-compatible PDF: directly inlines source PDF page content into imposed production pages rather than using a single nested Form XObject. Thru Cut OCG above Artwork. Requires browser and Illustrator verification; no guarantee of native Illustrator layers.
+V59: Export menu adds Illustrator Layered SVG (Current Artboard), with named Artwork and Thru Cut SVG layer groups, cut on top, exact page geometry, and one SVG per two-board sheet. SVG cut is RGB blue, not a real spot ink; assign ThruCut spot swatch in Illustrator. Illustrator native layer recognition is unverified. Embedded PDF artwork uses raster preview in SVG; existing production PDF retains PDF vectors and spot colour.
