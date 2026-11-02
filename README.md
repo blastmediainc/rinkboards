@@ -60,3 +60,5 @@ Hover over or focus a rinkboard name in the database to see its saved artwork pr
 ## AI and EPS logos
 
 Upload PDF-compatible Illustrator (.ai) files directly. Other AI and EPS files are automatically converted to PDF through the Blast Media Cloudflare Worker and CloudConvert before being placed on the board. Converted PDFs are kept as vector originals for production export where supported. Files are sent to the third-party conversion service; do not upload confidential assets without authorization. Conversion requires a working Worker deployment, CloudConvert API key and service availability.
+
+The site favicon is supplied as `favicon.png` and `favicon.ico` and uses the Blast Media icon from the app logo.
