@@ -1,6 +1,39 @@
 /* Blast Media band generator — fixed 17 x 3.2222 inch packaging band. */
 (()=>{'use strict';
 const $=id=>document.getElementById(id), W=1224,H=232;
+const BAND_FONT_FILE='FontsFree-Net-NeoSansBoldTR.ttf';
+const BAND_FONT_FAMILY='Neo Sans Bold';
+let bandFontBytesPromise=null,bandFontReadyPromise=null;
+async function bandFontBytes(){
+ if(!bandFontBytesPromise)bandFontBytesPromise=fetch(BAND_FONT_FILE).then(async response=>{
+  if(!response.ok)throw Error('Neo Sans font not found. Upload '+BAND_FONT_FILE+' beside index.html on GitHub Pages.');
+  const bytes=await response.arrayBuffer();
+  if(bytes.byteLength<1000)throw Error('Neo Sans font file is invalid');
+  return bytes;
+ }).catch(error=>{bandFontBytesPromise=null;throw error});
+ return bandFontBytesPromise;
+}
+async function ensureBandFont(){
+ if(!bandFontReadyPromise)bandFontReadyPromise=(async()=>{
+  const bytes=await bandFontBytes();
+  const face=new FontFace(BAND_FONT_FAMILY,bytes,{style:'normal',weight:'700'});
+  await face.load();document.fonts.add(face);
+  return true;
+ })().catch(error=>{bandFontReadyPromise=null;throw error});
+ return bandFontReadyPromise;
+}
+function fontBytesBase64(bytes){
+ const data=new Uint8Array(bytes);let result='';const chunk=8192;
+ for(let i=0;i<data.length;i+=chunk)result+=String.fromCharCode.apply(null,data.subarray(i,i+chunk));
+ return btoa(result);
+}
+async function registerBandPdfFont(doc){
+ const bytes=await bandFontBytes();
+ doc.addFileToVFS('NeoSansBoldTR.ttf',fontBytesBase64(bytes));
+ doc.addFont('NeoSansBoldTR.ttf','NeoSansBand','bold');
+ doc.setFont('NeoSansBand','bold');
+}
+
 let source='builder',selectedRecord=null,selectedBatch=[],board=null,team='',season='',size='',logoData='',logoFormat='',boardData='',boardSvg='';
 const modal=document.createElement('div');modal.id='bandModal';modal.hidden=true;
 modal.innerHTML=`<section class="bandPanel" role="dialog" aria-modal="true" aria-label="Packaging band generator"><header><h2>Packaging Band Generator</h2><button id="bandClose" type="button">Close</button></header><div class="bandFields"><label>Team<input id="bandTeam" type="text"></label><label>Season<input id="bandSeason" type="text"></label><label>Rinkboard size<input id="bandSize" type="text" placeholder="30 x 139"></label><label>Shipment month<input id="bandMonth" type="month"></label><label>Sponsor / rinkboard name<input id="bandSponsor" type="text"></label></div><div class="bandActions"><button id="bandLogoUpload" type="button">Upload / replace team logo in Dropbox</button><input id="bandLogoFile" type="file" accept=".png,.svg,.pdf,.webp,image/png,image/svg+xml,application/pdf,image/webp" hidden><button id="bandReload" type="button">Load team logo</button><span id="bandStatus" role="status"></span></div><div class="bandPreviewWrap"><canvas id="bandPreview" width="1224" height="232"></canvas></div><div class="bandActions"><button id="bandExport" type="button">Export 17″ × 3.22″ PDF</button><button id="bandExportAll" type="button" hidden>Export selected bands (separate PDFs)</button></div></section>`;
@@ -12,15 +45,15 @@ function api(){if(!window.RinkboardBandDropbox)throw Error('Dropbox integration 
 function formatMonth(v){if(!v)return '';const [y,m]=v.split('-');return new Date(Number(y),Number(m)-1,1).toLocaleString('en-US',{month:'short',year:'numeric'}).toUpperCase()}
 function image(src){return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(Error('Could not load image'));img.src=src})}
 function drawFit(ctx,img,x,y,w,h){let r=Math.min(w/img.width,h/img.height);ctx.drawImage(img,x+(w-img.width*r)/2,y+(h-img.height*r)/2,img.width*r,img.height*r)}
-async function render(){const canvas=$('bandPreview'),ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);ctx.fillStyle='#211e1e';ctx.textAlign='center';ctx.textBaseline='middle';
+async function render(){await ensureBandFont();const canvas=$('bandPreview'),ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);ctx.fillStyle='#211e1e';ctx.textAlign='center';ctx.textBaseline='middle';
 // Keep the left side blank for wrapping around the order.
 const brand=document.querySelector('header.top .brand img, .brand-logo');if(brand){try{let img=await image(brand.src);drawFit(ctx,img,505,17,204,55)}catch{}}
 if(logoData){try{drawFit(ctx,await logoPreviewImage(),525,92,170,119)}catch{}}
-ctx.font='bold 17px Lato,Arial,sans-serif';ctx.fillText('RINKBOARDS ('+$('bandSize').value.trim()+')',1021,31);
-ctx.font='bold 16px Lato,Arial,sans-serif';ctx.fillText('SHIPPED '+formatMonth($('bandMonth').value),1021,54);
+ctx.font='700 17px "Neo Sans Bold"';ctx.fillText('RINKBOARDS ('+$('bandSize').value.trim()+')',1021,31);
+ctx.font='700 16px "Neo Sans Bold"';ctx.fillText('SHIPPED '+formatMonth($('bandMonth').value),1021,54);
 ctx.strokeStyle='#111';ctx.lineWidth=1.5;ctx.strokeRect(853,80,329,72);
 if(boardData){try{drawFit(ctx,await image(boardData),861,85,313,62)}catch{}}
-ctx.font='bold 17px Lato,Arial,sans-serif';ctx.fillText($('bandSeason').value.trim().toUpperCase()+' SEASON',1021,193);
+ctx.font='700 17px "Neo Sans Bold"';ctx.fillText($('bandSeason').value.trim().toUpperCase()+' SEASON',1021,193);
 }
 function svgToData(svg){return new Promise((resolve,reject)=>{const url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));const img=new Image();img.onload=()=>{try{const ratio=(img.naturalWidth||1200)/(img.naturalHeight||300);if(!Number.isFinite(ratio)||ratio<=0)throw Error('Invalid board preview dimensions');const c=document.createElement('canvas');c.width=2400;c.height=Math.max(1,Math.min(2400,Math.round(2400/ratio)));const ctx=c.getContext('2d',{alpha:false});ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(img,0,0,c.width,c.height);resolve(c.toDataURL('image/png'))}catch(e){reject(e)}finally{URL.revokeObjectURL(url)}};img.onerror=()=>{URL.revokeObjectURL(url);reject(Error('Board preview could not be rendered'))};img.src=url})}
 async function getBoard(){if(source==='builder'){const p=window.RinkboardBridge.getProject();const idx=p.activeBoard;board=p.boards[idx];if(!board)throw Error('No active board');return window.RinkboardBridge.getBoardPreview(idx)}const d=JSON.parse(await api().downloadText(selectedRecord.path));board=d.project?.boards?.[0];if(!board)throw Error('Invalid saved board');return api().downloadText(selectedRecord.path.replace(/\.rinkboard\.json$/i,'.preview.svg'))}
@@ -164,7 +197,8 @@ function flattenBandSvg(markup){
 async function exportBand(){
  const {jsPDF}=window.jspdf;
  const doc=new jsPDF({orientation:'landscape',unit:'pt',format:[W,H],compress:true});
- const center=(txt,x,y,sz)=>{doc.setFont('helvetica','bold');doc.setFontSize(sz);doc.setTextColor(33,30,30);doc.text(txt,x,y,{align:'center'})};
+ await registerBandPdfFont(doc);
+ const center=(txt,x,y,sz)=>{doc.setFont('NeoSansBand','bold');doc.setFontSize(sz);doc.setTextColor(33,30,30);doc.text(txt,x,y,{align:'center'})};
  const fitImage=async(src,x,y,w,h)=>{if(!src)return;const img=await image(src);const r=Math.min(w/img.naturalWidth,h/img.naturalHeight);const iw=img.naturalWidth*r,ih=img.naturalHeight*r;let format=/^data:image\/jpe?g/i.test(src)?'JPEG':'PNG';if(!/^data:image\/(png|jpe?g)/i.test(src)){const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;c.getContext('2d').drawImage(img,0,0);src=c.toDataURL('image/png');format='PNG'}doc.addImage(src,format,x+(w-iw)/2,y+(h-ih)/2,iw,ih)};
  const brand=document.querySelector('header.top .brand img, .brand-logo');
  if(brand){try{
