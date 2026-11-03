@@ -153,15 +153,16 @@ async function finalizeBand(doc){
  out.getPages()[0].drawPage(embedded,{x:525+(170-w)/2,y:H-(92+(119-h)/2)-h,width:w,height:h});
  return await out.save();
 }
-// Naming convention: Team_Bands-Sponsor[_139in].pdf
+// Naming convention: TeamName_Bands-SponsorName[139in].pdf
+// Only one underscore is retained: the separator immediately before "Bands".
 function bandFileName(teamName,sponsorName,boardSize,includeLength=false){
- const clean=v=>String(v||'').trim().replace(/\.pdf$/i,'').replace(/[^a-z0-9 _-]/gi,'').replace(/\s+/g,'_').replace(/_+/g,'_').replace(/^[_-]+|[_-]+$/g,'');
+ const clean=v=>String(v||'').trim().replace(/\.pdf$/i,'').replace(/[^a-z0-9]/gi,'');
  const teamPart=clean(teamName)||'Team';
  let sponsorPart=clean(sponsorName)||'Sponsor';
  // Avoid duplicating a size already supplied as part of the sponsor name.
- const alreadySized=/_\d+(?:\.\d+)?in$/i.test(sponsorPart);
+ const alreadySized=/\d+(?:\.\d+)?in$/i.test(sponsorPart);
  const sizeMatch=String(boardSize||'').match(/(?:x|×)\s*(\d+(?:\.\d+)?)/i);
- if(includeLength && !alreadySized && sizeMatch)sponsorPart+='_'+sizeMatch[1]+'in';
+ if(includeLength && !alreadySized && sizeMatch)sponsorPart+=sizeMatch[1]+'in';
  return teamPart+'_Bands-'+sponsorPart;
 }
 function saveBand(bytes,name){const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));const a=document.createElement('a');a.href=url;a.download=name+'.pdf';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000)}
