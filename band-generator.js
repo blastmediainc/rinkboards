@@ -107,10 +107,16 @@ async function embedVectorLogo(doc){
   if(typeof doc.svg!=='function')throw Error('SVG-to-PDF vector library unavailable');
   const xml=new DOMParser().parseFromString((logoData.slice(0,logoData.indexOf(',')).includes(';base64')?atob(logoData.slice(logoData.indexOf(',')+1)):decodeURIComponent(logoData.slice(logoData.indexOf(',')+1))),'image/svg+xml');
   if(xml.querySelector('parsererror'))throw Error('Invalid SVG logo');
-  const root=xml.documentElement;
-  // Use a detached element, stripping active/external resources.
+  // Illustrator SVGs often contain CSS classes and nested SVG images.
+  // svg2pdf can render those nested images as solid black rectangles.
+  // Expand them into actual vector nodes and inline their CSS first.
+  const root=flattenBandSvg(new XMLSerializer().serializeToString(xml.documentElement));
+  // Keep internal paint-server references (#id), but strip external resources.
   root.querySelectorAll('script,foreignObject,iframe,object,embed').forEach(x=>x.remove());
-  root.querySelectorAll('*').forEach(el=>[...el.attributes].forEach(a=>{if(/^on/i.test(a.name)||(/href$/i.test(a.name)&&/^(?!#)/i.test(a.value.trim())))el.removeAttribute(a.name)}));
+  root.querySelectorAll('*').forEach(el=>[...el.attributes].forEach(a=>{
+   if(/^on/i.test(a.name)||(/href$/i.test(a.name)&&a.value.trim()&&!a.value.trim().startsWith('#')))el.removeAttribute(a.name);
+  }));
+  root.style.background='transparent';
   const vb=(root.getAttribute('viewBox')||'').trim().split(/[\s,]+/).map(Number);
   let w=vb.length===4&&vb[2]>0?vb[2]:parseFloat(root.getAttribute('width'))||100;
   let h=vb.length===4&&vb[3]>0?vb[3]:parseFloat(root.getAttribute('height'))||100;
@@ -120,7 +126,20 @@ async function embedVectorLogo(doc){
   await fitBandRasterLogo(doc,logoData);
  }
 }
-async function fitBandRasterLogo(doc,src){const img=await image(src);const r=Math.min(170/img.naturalWidth,119/img.naturalHeight);const w=img.naturalWidth*r,h=img.naturalHeight*r;let data=src,format='PNG';if(logoFormat==='webp'){const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;c.getContext('2d').drawImage(img,0,0);data=c.toDataURL('image/png')}doc.addImage(data,format,525+(170-w)/2,92+(119-h)/2,w,h)}
+async function fitBandRasterLogo(doc,src){
+ const img=await image(src);
+ const r=Math.min(170/img.naturalWidth,119/img.naturalHeight);
+ const w=img.naturalWidth*r,h=img.naturalHeight*r;
+ // Some PDF viewers render transparent PNG/WEBP alpha as opaque black.
+ // The band itself has a white background, so composite ONLY the PDF copy
+ // onto white at native image resolution; keep the original file untouched.
+ const c=document.createElement('canvas');
+ c.width=img.naturalWidth;c.height=img.naturalHeight;
+ const ctx=c.getContext('2d',{alpha:false});
+ ctx.fillStyle='#ffffff';ctx.fillRect(0,0,c.width,c.height);
+ ctx.drawImage(img,0,0);
+ doc.addImage(c.toDataURL('image/png'),'PNG',525+(170-w)/2,92+(119-h)/2,w,h);
+}
 async function finalizeBand(doc){
  const bytes=new Uint8Array(doc.output('arraybuffer'));
  if(!logoData||logoFormat!=='pdf')return bytes;
