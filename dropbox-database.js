@@ -324,7 +324,8 @@ window.RinkboardBandDropbox={
  downloadText:download,
  selectedRecords:()=>entries.filter(e=>selectedPaths.has(e.path)),
  async downloadLogo(name){const path=base()+'/Team Logos/'+name;const res=await fetch(CONTENT+'/files/download',{method:'POST',headers:{Authorization:'Bearer '+ensure(),'Dropbox-API-Arg':JSON.stringify({path})}});if(!res.ok)throw Error('Team logo not found');const blob=await res.blob();return await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(blob)})},
- async uploadLogo(name,file){await ensureFolders(base()+'/Team Logos');return upload(base()+'/Team Logos/'+name,file,null,true)}
+ async uploadLogo(name,file){await ensureFolders(base()+'/Team Logos');return upload(base()+'/Team Logos/'+name,file,null,true)},
+ async deleteLogo(name){const path=base()+'/Team Logos/'+name;const res=await fetch('https://api.dropboxapi.com/2/files/delete_v2',{method:'POST',headers:{Authorization:'Bearer '+ensure(),'Content-Type':'application/json'},body:JSON.stringify({path})});if(!res.ok&&res.status!==409)throw Error('Could not remove old logo '+name)}
 };
 window.addEventListener('rinkboard-brand-changed',event=>perform(()=>switchDatabaseBrand(event.detail.brand)));
 $('builderDbSave').onclick=()=>perform(builderSave);

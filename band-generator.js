@@ -1,7 +1,7 @@
 /* Blast Media band generator — fixed 17 x 3.2222 inch packaging band. */
 (()=>{'use strict';
 const $=id=>document.getElementById(id), W=1224,H=232;
-let source='builder',selectedRecord=null,selectedBatch=[],board=null,team='',season='',size='',logoData='',boardData='',boardSvg='';
+let source='builder',selectedRecord=null,selectedBatch=[],board=null,team='',season='',size='',logoData='',logoFormat='',boardData='',boardSvg='';
 const modal=document.createElement('div');modal.id='bandModal';modal.hidden=true;
 modal.innerHTML=`<section class="bandPanel" role="dialog" aria-modal="true" aria-label="Packaging band generator"><header><h2>Packaging Band Generator</h2><button id="bandClose" type="button">Close</button></header><div class="bandFields"><label>Team<input id="bandTeam" type="text"></label><label>Season<input id="bandSeason" type="text"></label><label>Rinkboard size<input id="bandSize" type="text" placeholder="30 x 139"></label><label>Shipment month<input id="bandMonth" type="month"></label><label>Sponsor / rinkboard name<input id="bandSponsor" type="text"></label></div><div class="bandActions"><button id="bandLogoUpload" type="button">Upload / replace team logo in Dropbox</button><input id="bandLogoFile" type="file" accept=".png,.svg,.pdf,.webp,image/png,image/svg+xml,application/pdf,image/webp" hidden><button id="bandReload" type="button">Load team logo</button><span id="bandStatus" role="status"></span></div><div class="bandPreviewWrap"><canvas id="bandPreview" width="1224" height="232"></canvas></div><div class="bandActions"><button id="bandExport" type="button">Export 17″ × 3.22″ PDF</button><button id="bandExportAll" type="button" hidden>Export selected bands (separate PDFs)</button></div></section>`;
 document.body.append(modal);
@@ -15,7 +15,7 @@ function drawFit(ctx,img,x,y,w,h){let r=Math.min(w/img.width,h/img.height);ctx.d
 async function render(){const canvas=$('bandPreview'),ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);ctx.fillStyle='#211e1e';ctx.textAlign='center';ctx.textBaseline='middle';
 // Keep the left side blank for wrapping around the order.
 const brand=document.querySelector('header.top .brand img, .brand-logo');if(brand){try{let img=await image(brand.src);drawFit(ctx,img,505,17,204,55)}catch{}}
-if(logoData){try{drawFit(ctx,await image(logoData),525,92,170,119)}catch{}}
+if(logoData){try{drawFit(ctx,await logoPreviewImage(),525,92,170,119)}catch{}}
 ctx.font='bold 17px Lato,Arial,sans-serif';ctx.fillText('RINKBOARDS ('+$('bandSize').value.trim()+')',1021,31);
 ctx.font='bold 16px Lato,Arial,sans-serif';ctx.fillText('SHIPPED '+formatMonth($('bandMonth').value),1021,54);
 ctx.strokeStyle='#111';ctx.lineWidth=1.5;ctx.strokeRect(853,80,329,72);
@@ -24,49 +24,95 @@ ctx.font='bold 17px Lato,Arial,sans-serif';ctx.fillText($('bandSeason').value.tr
 }
 function svgToData(svg){return new Promise((resolve,reject)=>{const url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));const img=new Image();img.onload=()=>{try{const ratio=(img.naturalWidth||1200)/(img.naturalHeight||300);if(!Number.isFinite(ratio)||ratio<=0)throw Error('Invalid board preview dimensions');const c=document.createElement('canvas');c.width=2400;c.height=Math.max(1,Math.min(2400,Math.round(2400/ratio)));const ctx=c.getContext('2d',{alpha:false});ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(img,0,0,c.width,c.height);resolve(c.toDataURL('image/png'))}catch(e){reject(e)}finally{URL.revokeObjectURL(url)}};img.onerror=()=>{URL.revokeObjectURL(url);reject(Error('Board preview could not be rendered'))};img.src=url})}
 async function getBoard(){if(source==='builder'){const p=window.RinkboardBridge.getProject();const idx=p.activeBoard;board=p.boards[idx];if(!board)throw Error('No active board');return window.RinkboardBridge.getBoardPreview(idx)}const d=JSON.parse(await api().downloadText(selectedRecord.path));board=d.project?.boards?.[0];if(!board)throw Error('Invalid saved board');return api().downloadText(selectedRecord.path.replace(/\.rinkboard\.json$/i,'.preview.svg'))}
-async function loadTeamLogo(){logoData='';const t=$('bandTeam').value.trim();if(!t){status('Enter a team first');await render();return}try{logoData=await api().downloadLogo(filename(t)+'.png');status('Loaded '+filename(t)+'.png from Dropbox')}catch(e){status('No logo found for '+t+'. Upload a PNG, SVG, PDF, or WEBP to add one.')}await render()}
-async function open(from){source=from;selectedRecord=null;selectedBatch=[];logoData='';boardData='';boardSvg='';if(from==='builder'){team=$('builderTeam')?.value||'';season=$('builderSeason')?.value||''}else{const records=api().selectedRecords();if(!records.length){alert('Select one or more rinkboards in the Database to generate bands.');return}selectedBatch=records;selectedRecord=records[0];team=selectedRecord.team;season=selectedRecord.season}
+async function loadTeamLogo(){
+ logoData='';logoFormat='';const t=$('bandTeam').value.trim();
+ if(!t){status('Enter a team first');await render();return}
+ for(const ext of ['svg','pdf','png','webp']){
+  try{
+   const data=await api().downloadLogo(filename(t)+'.'+ext);
+   logoData=data;logoFormat=ext;
+   status('Loaded original '+ext.toUpperCase()+' team logo from Dropbox'+(['svg','pdf'].includes(ext)?' — vector preserved':'') );
+   await render();return;
+  }catch(e){if(e.message!=='Team logo not found')throw e}
+ }
+ status('No logo found for '+t+'. Upload a PNG, SVG, PDF, or WEBP to add one.');await render();
+}
+async function open(from){source=from;selectedRecord=null;selectedBatch=[];logoData='';logoFormat='';boardData='';boardSvg='';if(from==='builder'){team=$('builderTeam')?.value||'';season=$('builderSeason')?.value||''}else{const records=api().selectedRecords();if(!records.length){alert('Select one or more rinkboards in the Database to generate bands.');return}selectedBatch=records;selectedRecord=records[0];team=selectedRecord.team;season=selectedRecord.season}
 $('bandExportAll').hidden=source!=='database'||selectedBatch.length<2;modal.hidden=false;const d=new Date();$('bandMonth').value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');$('bandTeam').value=team;$('bandSeason').value=season;status('Loading board…');try{const svg=await getBoard();size='30 x '+(board.settings?.width||selectedRecord?.width||139);$('bandSize').value=size;$('bandSponsor').value=board.settings?.sponsor||selectedRecord?.name||'';boardSvg=svg;boardData=await svgToData(svg);await loadTeamLogo()}catch(e){status(e.message);await render()}}
-$('bandClose').onclick=()=>modal.hidden=true;modal.addEventListener('click',e=>{if(e.target===modal)modal.hidden=true});for(const id of ['bandTeam','bandSeason','bandSize','bandMonth','bandSponsor'])$(id).addEventListener('input',()=>{if(id==='bandTeam')logoData='';render()});$('bandReload').onclick=()=>loadTeamLogo();$('bandLogoUpload').onclick=()=>$('bandLogoFile').click();// Convert accepted artwork to a consistent PNG for Dropbox and the canvas/PDF renderer.
-async function logoToPng(file){
- const ext=(file.name.split('.').pop()||'').toLowerCase();
- if(!['png','svg','pdf','webp'].includes(ext))throw Error('Choose a PNG, SVG, PDF, or WEBP file');
- if(file.size>20*1024*1024)throw Error('Logo must be smaller than 20 MB');
- if(ext==='png')return file;
- const canvas=document.createElement('canvas');let width,height;
- if(ext==='pdf'){
-  if(!window.pdfjsLib)throw Error('PDF preview library unavailable');
-  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
-  const pdf=await pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
-  try{const page=await pdf.getPage(1),base=page.getViewport({scale:1});
-   const viewport=page.getViewport({scale:Math.min(4,2400/Math.max(base.width,base.height))});
-   canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
-   await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
-  }finally{await pdf.destroy()}
- }else{
-  let blob=file;
+$('bandClose').onclick=()=>modal.hidden=true;modal.addEventListener('click',e=>{if(e.target===modal)modal.hidden=true});for(const id of ['bandTeam','bandSeason','bandSize','bandMonth','bandSponsor'])$(id).addEventListener('input',()=>{if(id==='bandTeam'){logoData='';logoFormat=''}render()});$('bandReload').onclick=()=>loadTeamLogo();$('bandLogoUpload').onclick=()=>$('bandLogoFile').click();// Store the ORIGINAL artwork in Dropbox. Never flatten SVG or PDF logos.
+$('bandLogoFile').onchange=async()=>{
+ const file=$('bandLogoFile').files[0];if(!file)return;
+ try{
+  const ext=(file.name.split('.').pop()||'').toLowerCase();
+  if(!['png','svg','pdf','webp'].includes(ext))throw Error('Choose a PNG, SVG, PDF, or WEBP file');
+  if(file.size>20*1024*1024)throw Error('Logo must be smaller than 20 MB');
   if(ext==='svg'){
    const xml=new DOMParser().parseFromString(await file.text(),'image/svg+xml');
    if(xml.querySelector('parsererror')||xml.documentElement.localName!=='svg')throw Error('Invalid SVG');
-   xml.querySelectorAll('script,foreignObject,iframe,object,embed').forEach(x=>x.remove());
-   xml.querySelectorAll('*').forEach(el=>[...el.attributes].forEach(a=>{
-    if(/^on/i.test(a.name)||(/href$/i.test(a.name)&&/^(?!#)/i.test(a.value.trim()))||/url\(\s*['"]?(?!#)/i.test(a.value))el.removeAttribute(a.name);
-   }));
-   blob=new Blob([new XMLSerializer().serializeToString(xml.documentElement)],{type:'image/svg+xml'});
   }
-  const url=URL.createObjectURL(blob);
-  try{const img=await image(url);width=img.naturalWidth;height=img.naturalHeight;
-   if(!width||!height)throw Error('Logo has invalid dimensions');
-   const scale=Math.min(1,2400/Math.max(width,height));
-   canvas.width=Math.max(1,Math.round(width*scale));canvas.height=Math.max(1,Math.round(height*scale));
-   canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
-  }finally{URL.revokeObjectURL(url)}
- }
- const png=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Could not convert logo to PNG')),'image/png'));
- return new File([png],filename(file.name.replace(/\.[^.]+$/,''))+'.png',{type:'image/png'});
+  if(ext==='pdf'&&!file.type.includes('pdf')&&!String.fromCharCode(...new Uint8Array(await file.slice(0,4).arrayBuffer())).startsWith('%PDF'))throw Error('Invalid PDF');
+  const t=$('bandTeam').value.trim();if(!t)throw Error('Enter a team');
+  await api().uploadLogo(filename(t)+'.'+ext,file);
+  // Remove earlier logo formats so replacements always win, including existing V89 PNGs.
+  if(api().deleteLogo){for(const old of ['svg','pdf','png','webp'])if(old!==ext){try{await api().deleteLogo(filename(t)+'.'+old)}catch(e){console.warn('Could not remove old team logo',old,e)}}}
+  status('Saved original '+ext.toUpperCase()+' logo to Dropbox');await loadTeamLogo();
+ }catch(e){status(e.message)}finally{$('bandLogoFile').value=''}
+};
+// The canvas is ONLY an on-screen preview. Export uses original vector paths.
+async function logoPreviewImage(){
+ if(!logoData)return null;
+ if(logoFormat!=='pdf')return image(logoData);
+ if(!window.pdfjsLib)throw Error('PDF preview library unavailable');
+ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+ const bytes=Uint8Array.from(atob(logoData.split(',')[1]),c=>c.charCodeAt(0));
+ const pdf=await pdfjsLib.getDocument({data:bytes}).promise;
+ try{const page=await pdf.getPage(1),base=page.getViewport({scale:1}),viewport=page.getViewport({scale:Math.min(3,1200/Math.max(base.width,base.height))});const c=document.createElement('canvas');c.width=Math.ceil(viewport.width);c.height=Math.ceil(viewport.height);await page.render({canvasContext:c.getContext('2d'),viewport}).promise;return image(c.toDataURL('image/png'))}finally{await pdf.destroy()}
 }
-$('bandLogoFile').onchange=async()=>{const file=$('bandLogoFile').files[0];if(!file)return;try{const normalized=await logoToPng(file);const t=$('bandTeam').value.trim();if(!t)throw Error('Enter a team');await api().uploadLogo(filename(t)+'.png',normalized);status('Saved '+filename(t)+'.png to Dropbox');await loadTeamLogo()}catch(e){status(e.message)}finally{$('bandLogoFile').value=''}};
-// Vector-first PDF: text, outlines and SVG rinkboard stay vector; uploaded team logos are normalized to PNG for reliable preview/export.
+async function embedVectorLogo(doc){
+ if(!logoData)return;
+ if(logoFormat==='svg'){
+  if(typeof doc.svg!=='function')throw Error('SVG-to-PDF vector library unavailable');
+  const xml=new DOMParser().parseFromString((logoData.slice(0,logoData.indexOf(',')).includes(';base64')?atob(logoData.slice(logoData.indexOf(',')+1)):decodeURIComponent(logoData.slice(logoData.indexOf(',')+1))),'image/svg+xml');
+  if(xml.querySelector('parsererror'))throw Error('Invalid SVG logo');
+  const root=xml.documentElement;
+  // Use a detached element, stripping active/external resources.
+  root.querySelectorAll('script,foreignObject,iframe,object,embed').forEach(x=>x.remove());
+  root.querySelectorAll('*').forEach(el=>[...el.attributes].forEach(a=>{if(/^on/i.test(a.name)||(/href$/i.test(a.name)&&/^(?!#)/i.test(a.value.trim())))el.removeAttribute(a.name)}));
+  const vb=(root.getAttribute('viewBox')||'').trim().split(/[\s,]+/).map(Number);
+  let w=vb.length===4&&vb[2]>0?vb[2]:parseFloat(root.getAttribute('width'))||100;
+  let h=vb.length===4&&vb[3]>0?vb[3]:parseFloat(root.getAttribute('height'))||100;
+  const scale=Math.min(170/w,119/h);w*=scale;h*=scale;
+  await doc.svg(root,{x:525+(170-w)/2,y:92+(119-h)/2,width:w,height:h});
+ }else if(logoFormat!=='pdf'){
+  await fitBandRasterLogo(doc,logoData);
+ }
+}
+async function fitBandRasterLogo(doc,src){const img=await image(src);const r=Math.min(170/img.naturalWidth,119/img.naturalHeight);const w=img.naturalWidth*r,h=img.naturalHeight*r;let data=src,format='PNG';if(logoFormat==='webp'){const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;c.getContext('2d').drawImage(img,0,0);data=c.toDataURL('image/png')}doc.addImage(data,format,525+(170-w)/2,92+(119-h)/2,w,h)}
+async function finalizeBand(doc){
+ const bytes=new Uint8Array(doc.output('arraybuffer'));
+ if(!logoData||logoFormat!=='pdf')return bytes;
+ if(!window.PDFLib)throw Error('PDF vector embedding library unavailable');
+ const out=await PDFLib.PDFDocument.load(bytes);
+ const source=Uint8Array.from(atob(logoData.split(',')[1]),c=>c.charCodeAt(0));
+ const [embedded]=await out.embedPdf(source,[0]);
+ const scale=Math.min(170/embedded.width,119/embedded.height);
+ const w=embedded.width*scale,h=embedded.height*scale;
+ // PDF-lib coordinates start at the bottom; jsPDF coordinates start at the top.
+ out.getPages()[0].drawPage(embedded,{x:525+(170-w)/2,y:H-(92+(119-h)/2)-h,width:w,height:h});
+ return await out.save();
+}
+// Naming convention: Team_Bands-Sponsor[_139in].pdf
+function bandFileName(teamName,sponsorName,boardSize,includeLength=false){
+ const clean=v=>String(v||'').trim().replace(/\.pdf$/i,'').replace(/[^a-z0-9 _-]/gi,'').replace(/\s+/g,'_').replace(/_+/g,'_').replace(/^[_-]+|[_-]+$/g,'');
+ const teamPart=clean(teamName)||'Team';
+ let sponsorPart=clean(sponsorName)||'Sponsor';
+ // Avoid duplicating a size already supplied as part of the sponsor name.
+ const alreadySized=/_\d+(?:\.\d+)?in$/i.test(sponsorPart);
+ const sizeMatch=String(boardSize||'').match(/(?:x|×)\s*(\d+(?:\.\d+)?)/i);
+ if(includeLength && !alreadySized && sizeMatch)sponsorPart+='_'+sizeMatch[1]+'in';
+ return teamPart+'_Bands-'+sponsorPart;
+}
+function saveBand(bytes,name){const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));const a=document.createElement('a');a.href=url;a.download=name+'.pdf';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000)}
 async function rasterBoard(doc){if(!boardSvg)return;const svgBlob=new Blob([boardSvg],{type:'image/svg+xml'});const url=URL.createObjectURL(svgBlob);try{const img=await image(url);const c=document.createElement('canvas');c.width=2504;c.height=496;const ctx=c.getContext('2d');ctx.drawImage(img,0,0,c.width,c.height);doc.addImage(c.toDataURL('image/png'),'PNG',861,85,313,62)}finally{URL.revokeObjectURL(url)}}
 // Flatten nested Illustrator SVG images into vector elements before sending to svg2pdf.
 // This mirrors the production exporter fix: SVG data URI <image> elements render black in svg2pdf.
@@ -132,7 +178,7 @@ async function exportBand(){
    cx.drawImage(logo,(c.width-iw)/2,(c.height-ih)/2,iw,ih);
    await fitImage(c.toDataURL('image/png'),505,17,204,55);
  }catch(e){console.warn('Blast Media brand image unavailable',e);throw Error('Blast Media logo could not be embedded in the PDF: '+e.message)}}
- if(logoData){await fitImage(logoData,525,92,170,119)}
+ if(logoData){await embedVectorLogo(doc)}
  center('RINKBOARDS ('+$('bandSize').value.trim()+')',1021,36,17);
  center('SHIPPED '+formatMonth($('bandMonth').value),1021,59,16);
  doc.setDrawColor(17,17,17);doc.setLineWidth(1.5);doc.rect(853,80,329,72);
@@ -144,7 +190,8 @@ async function exportBand(){
  center($('bandSeason').value.trim().toUpperCase()+' SEASON',1021,199,17);
  return doc;
 }
-$('bandExport').onclick=async()=>{try{status('Creating colour-accurate PDF…');const doc=await exportBand();const name=[$('bandTeam').value,$('bandSponsor').value,'Band',formatMonth($('bandMonth').value)].map(x=>x.trim().replace(/[^a-z0-9-]+/gi,'_')).filter(Boolean).join('_');doc.save(name+'.pdf');status('Band PDF exported with colour-accurate artwork preview')}catch(e){status('Export failed: '+e.message);console.error(e)}};
-$('bandExportAll').onclick=async()=>{const button=$('bandExportAll');button.disabled=true;try{const list=selectedBatch.slice();const original=selectedRecord;let ok=0;const failed=[];for(let i=0;i<list.length;i++){selectedRecord=list[i];status('Generating band '+(i+1)+' of '+list.length+': '+selectedRecord.name);try{const svg=await getBoard();boardSvg=svg;boardData=await svgToData(svg);$('bandTeam').value=selectedRecord.team;$('bandSeason').value=selectedRecord.season;$('bandSize').value='30 x '+(board.settings?.width||selectedRecord.width||139);$('bandSponsor').value=board.settings?.sponsor||selectedRecord.name;await loadTeamLogo();const doc=await exportBand();const stem=[selectedRecord.team,selectedRecord.season,selectedRecord.name,selectedRecord.size,'Band'].map(x=>String(x||'').replace(/[^a-z0-9-]+/gi,'_')).filter(Boolean).join('_');doc.save(stem+'.pdf');ok++}catch(e){console.error('Band failed for '+selectedRecord.name,e);failed.push(selectedRecord.name+': '+e.message);status('Failed '+selectedRecord.name+': '+e.message)}}selectedRecord=original;status('Exported '+ok+' of '+list.length+' bands.'+(failed.length?' Failed: '+failed.join('; '):' Check browser permission for multiple downloads.'))}finally{button.disabled=false}};
+$('bandExport').onclick=async()=>{try{status('Creating colour-accurate PDF…');const doc=await exportBand();const name=bandFileName($('bandTeam').value,$('bandSponsor').value,$('bandSize').value);saveBand(await finalizeBand(doc),name);status('Band PDF exported with colour-accurate artwork preview')}catch(e){status('Export failed: '+e.message);console.error(e)}};
+$('bandExportAll').onclick=async()=>{const button=$('bandExportAll');button.disabled=true;try{const list=selectedBatch.slice();const original=selectedRecord;let ok=0;const failed=[];for(let i=0;i<list.length;i++){selectedRecord=list[i];status('Generating band '+(i+1)+' of '+list.length+': '+selectedRecord.name);try{const svg=await getBoard();boardSvg=svg;boardData=await svgToData(svg);$('bandTeam').value=selectedRecord.team;$('bandSeason').value=selectedRecord.season;$('bandSize').value='30 x '+(board.settings?.width||selectedRecord.width||139);$('bandSponsor').value=board.settings?.sponsor||selectedRecord.name;await loadTeamLogo();const doc=await exportBand();const sameSponsorCount=list.filter(r=>String(r.team||'').toLowerCase()===String(selectedRecord.team||'').toLowerCase() && String(r.name||'').toLowerCase()===String(selectedRecord.name||'').toLowerCase()).length;
+ const stem=bandFileName(selectedRecord.team,$('bandSponsor').value,$('bandSize').value,sameSponsorCount>1);saveBand(await finalizeBand(doc),stem);ok++}catch(e){console.error('Band failed for '+selectedRecord.name,e);failed.push(selectedRecord.name+': '+e.message);status('Failed '+selectedRecord.name+': '+e.message)}}selectedRecord=original;status('Exported '+ok+' of '+list.length+' bands.'+(failed.length?' Failed: '+failed.join('; '):' Check browser permission for multiple downloads.'))}finally{button.disabled=false}};
 window.RinkboardBands={open};
 })();
