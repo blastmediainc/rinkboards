@@ -12,6 +12,16 @@ function expired(){return !token||Date.now()>token.expires-60000}
 function ensure(){if(expired())throw Error('Dropbox session expired. Click Connect Dropbox to sign in again.');return token.access}
 async function rpc(endpoint,data){let res=await fetch(API+endpoint,{method:'POST',headers:{Authorization:'Bearer '+ensure(),'Content-Type':'application/json'},body:JSON.stringify(data)});let raw=await res.text();if(!res.ok)throw Error(`${endpoint}: ${raw.slice(0,350)}`);return raw?JSON.parse(raw):{}}
 async function download(path){let res=await fetch(CONTENT+'/files/download',{method:'POST',headers:{Authorization:'Bearer '+ensure(),'Dropbox-API-Arg':JSON.stringify({path})}});if(!res.ok)throw Error('Download: '+(await res.text()).slice(0,250));return await res.text()}
+function parseSavedProject(raw,record){
+ const name=record?.name||record?.path||'Unknown rinkboard';
+ const trimmed=String(raw||'').replace(/^\\uFEFF/,'').trim();
+ if(!trimmed)throw Error(name+': saved project is empty in Dropbox');
+ if(!trimmed.startsWith('{'))throw Error(name+': saved project is not JSON (starts with '+JSON.stringify(trimmed.slice(0,55))+'). Preview not changed.');
+ let saved;
+ try{saved=JSON.parse(trimmed)}catch(e){throw Error(name+': saved project contains invalid JSON ('+e.message+'). Preview not changed.')}
+ if(!saved?.project||!Array.isArray(saved.project.boards)||!saved.project.boards.length)throw Error(name+': saved project does not contain editable artboards. Preview not changed.');
+ return saved;
+}
 async function upload(path,content,rev,overwrite=false){let args={path,mode:rev?{'.tag':'update',update:rev}:overwrite?'overwrite':'add',autorename:false,mute:true,strict_conflict:true};let res=await fetch(CONTENT+'/files/upload',{method:'POST',headers:{Authorization:'Bearer '+ensure(),'Dropbox-API-Arg':JSON.stringify(args),'Content-Type':'application/octet-stream'},body:content});if(!res.ok){let t=await res.text();if(res.status===409)throw Error('Dropbox conflict: this file may have changed or already exist. Refresh the database before saving. '+t.slice(0,120));throw Error('Upload: '+t.slice(0,350))}return await res.json()}
 async function mkdir(path){try{await rpc('/files/create_folder_v2',{path,autorename:false})}catch(e){if(!String(e).includes('conflict'))throw e}}
 async function ensureFolders(path){let parts=path.split('/').filter(Boolean),curr='';for(let part of parts){curr+='/'+part;await mkdir(curr)}}
@@ -134,7 +144,7 @@ async function exportSelected(){
  let exported=0;
  for(const record of chosen){
   message(`Loading ${record.name} from Dropbox (${exported+1}/${chosen.length})…`);
-  const data=JSON.parse(await download(record.path));
+  const data=parseSavedProject(await download(record.path),record);
   if(!data.project||!Array.isArray(data.project.boards)||!data.project.boards[0])throw Error('Invalid database project: '+record.name);
   const board=JSON.parse(JSON.stringify(data.project.boards[0]));
   const qty=exportQuantities.get(record.path)??1;
@@ -232,28 +242,6 @@ async function saveOne(index,ctx){
 }
 async function saveCurrent(){const ctx=context(),obj=window.RinkboardBridge.getProject(),result=await saveOne(obj.activeBoard,ctx);render();message(`Saved ${result.name} to Dropbox. Production PDF not regenerated; export it separately when ready.`)}
 async function saveAll(){const ctx=context(),obj=window.RinkboardBridge.getProject(),done=[];for(let i=0;i<obj.boards.length;i++)done.push(await saveOne(i,ctx));render();message(`Saved ${done.length} editable artboards to Dropbox. Production PDFs not regenerated; export separately when ready.`)}
-// V78: Regenerate one selected preview, without modifying the saved project or PDF.
-async function rebuildOnePreview(record){
- if(expired())throw Error('Connect Dropbox before refreshing previews.');
- const bridge=window.RinkboardBridge;
- if(!bridge?.getProject||!bridge?.openProject||!bridge?.getBoardPreview)throw Error('Artwork editor is not ready');
- const original=bridge.getProject();
- message('Refreshing preview: '+record.name+'…');
- try{
-  const saved=JSON.parse(await download(record.path));
-  if(!saved.project?.boards?.length)throw Error('Saved artboard is missing');
-  bridge.openProject(saved.project);
-  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-  const svg=bridge.getBoardPreview(0);
-  if(typeof svg!=='string'||!svg.includes('<svg'))throw Error('Generated preview is empty');
-  await upload(record.path.replace(/\\.rinkboard\\.json$/i,'.preview.svg'),svg,null,true);
-  hoverPreviewCache.delete(record.path.replace(/\\.rinkboard\\.json$/i,'.preview.svg'));
-  message('Preview refreshed for '+record.name+'.');
- }finally{
-  bridge.openProject(original);
-  render();
- }
-}
 // V75: Repair all Dropbox previews from saved editable projects, without changing their JSON.
 async function rebuildSelectedPreviews(){
  if(expired())throw Error('Connect Dropbox before refreshing previews.');
@@ -269,7 +257,7 @@ async function rebuildSelectedPreviews(){
    const record=targets[i];
    message('Refreshing selected previews '+(i+1)+' / '+targets.length+': '+record.name);
    try{
-    const saved=JSON.parse(await download(record.path));
+    const saved=parseSavedProject(await download(record.path),record);
     if(!saved.project?.boards?.length)throw Error('Missing saved artboard');
     bridge.openProject(saved.project);
     await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
@@ -285,10 +273,10 @@ async function rebuildSelectedPreviews(){
   bridge.openProject(original);
   render();
  }
- message('Refreshed '+ok+' / '+targets.length+' selected previews.'+(failed.length?' Failed: '+failed.slice(0,5).join('; ')+(failed.length>5?' (+'+(failed.length-5)+' more)':''):''));
+ message('Refreshed '+ok+' / '+targets.length+' selected previews.'+(failed.length?' Failed: '+failed.slice(0,3).join('; ')+(failed.length>3?' (+'+(failed.length-3)+' more; see browser console)':''):''));
 }
 
-async function openRecord(record){let data=JSON.parse(await download(record.path));if(!data.project||!Array.isArray(data.project.boards))throw Error('This is not a valid Rinkboard Builder database entry');if(!confirm(`Open ${record.name} in the editor? Unsaved edits in the current project will be lost.`))return;window.RinkboardBridge.openProject(data.project);selectedRecord=record;$('dbTeam').value=record.team;$('dbSeason').value=record.season;builderChoices();$('builderTeam').value=record.team;builderChoices();$('builderSeason').value=record.season;syncBuilderProjectSeason();$('dbOverlay').hidden=true;message(`Opened ${record.name}. Save Current Artboard to update it in Dropbox.`)}
+async function openRecord(record){let data=parseSavedProject(await download(record.path),record);if(!data.project||!Array.isArray(data.project.boards))throw Error('This is not a valid Rinkboard Builder database entry');if(!confirm(`Open ${record.name} in the editor? Unsaved edits in the current project will be lost.`))return;window.RinkboardBridge.openProject(data.project);selectedRecord=record;$('dbTeam').value=record.team;$('dbSeason').value=record.season;builderChoices();$('builderTeam').value=record.team;builderChoices();$('builderSeason').value=record.season;syncBuilderProjectSeason();$('dbOverlay').hidden=true;message(`Opened ${record.name}. Save Current Artboard to update it in Dropbox.`)}
 window.RinkboardBandDropbox={
  downloadText:download,
  selectedRecords:()=>entries.filter(e=>selectedPaths.has(e.path)),
