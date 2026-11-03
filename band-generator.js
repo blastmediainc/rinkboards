@@ -3,7 +3,7 @@
 const $=id=>document.getElementById(id), W=1224,H=232;
 let source='builder',selectedRecord=null,selectedBatch=[],board=null,team='',season='',size='',logoData='',boardData='',boardSvg='';
 const modal=document.createElement('div');modal.id='bandModal';modal.hidden=true;
-modal.innerHTML=`<section class="bandPanel" role="dialog" aria-modal="true" aria-label="Packaging band generator"><header><h2>Packaging Band Generator</h2><button id="bandClose" type="button">Close</button></header><div class="bandFields"><label>Team<input id="bandTeam" type="text"></label><label>Season<input id="bandSeason" type="text"></label><label>Rinkboard size<input id="bandSize" type="text" placeholder="30 x 139"></label><label>Shipment month<input id="bandMonth" type="month"></label><label>Sponsor / rinkboard name<input id="bandSponsor" type="text"></label></div><div class="bandActions"><button id="bandLogoUpload" type="button">Upload / replace team logo in Dropbox</button><input id="bandLogoFile" type="file" accept="image/png" hidden><button id="bandReload" type="button">Load team logo</button><span id="bandStatus" role="status"></span></div><div class="bandPreviewWrap"><canvas id="bandPreview" width="1224" height="232"></canvas></div><div class="bandActions"><button id="bandExport" type="button">Export 17″ × 3.22″ PDF</button><button id="bandExportAll" type="button" hidden>Export selected bands (separate PDFs)</button></div></section>`;
+modal.innerHTML=`<section class="bandPanel" role="dialog" aria-modal="true" aria-label="Packaging band generator"><header><h2>Packaging Band Generator</h2><button id="bandClose" type="button">Close</button></header><div class="bandFields"><label>Team<input id="bandTeam" type="text"></label><label>Season<input id="bandSeason" type="text"></label><label>Rinkboard size<input id="bandSize" type="text" placeholder="30 x 139"></label><label>Shipment month<input id="bandMonth" type="month"></label><label>Sponsor / rinkboard name<input id="bandSponsor" type="text"></label></div><div class="bandActions"><button id="bandLogoUpload" type="button">Upload / replace team logo in Dropbox</button><input id="bandLogoFile" type="file" accept=".png,.svg,.pdf,.webp,image/png,image/svg+xml,application/pdf,image/webp" hidden><button id="bandReload" type="button">Load team logo</button><span id="bandStatus" role="status"></span></div><div class="bandPreviewWrap"><canvas id="bandPreview" width="1224" height="232"></canvas></div><div class="bandActions"><button id="bandExport" type="button">Export 17″ × 3.22″ PDF</button><button id="bandExportAll" type="button" hidden>Export selected bands (separate PDFs)</button></div></section>`;
 document.body.append(modal);
 const style=document.createElement('style');style.textContent=`#bandModal[hidden]{display:none}#bandModal{position:fixed;inset:0;z-index:10020;background:#0009;display:flex;align-items:center;justify-content:center;padding:16px;font-family:Lato,Arial,sans-serif}.bandPanel{width:min(1250px,97vw);max-height:94vh;overflow:auto;background:#fff;border-radius:12px;padding:22px;color:#252525;box-shadow:0 15px 70px #0004}.bandPanel header,.bandActions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.bandPanel header h2{margin:0}.bandFields{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px;margin:20px 0}.bandFields label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:700}.bandFields input{min-width:0;padding:9px;border:1px solid #ccc;border-radius:6px}.bandActions{justify-content:flex-start;margin:12px 0}.bandActions button,#bandClose{padding:9px 14px;background:#80c33d;border:0;border-radius:6px;font-weight:700;cursor:pointer}.bandPreviewWrap{overflow:auto;background:#e9e9e9;padding:12px;border-radius:6px}#bandPreview{width:100%;min-width:650px;height:auto;background:white;display:block}#bandStatus{font-size:12px;color:#555}`;document.head.append(style);
 function status(s){$('bandStatus').textContent=s}
@@ -24,11 +24,49 @@ ctx.font='bold 17px Lato,Arial,sans-serif';ctx.fillText($('bandSeason').value.tr
 }
 function svgToData(svg){return new Promise((resolve,reject)=>{const url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));const img=new Image();img.onload=()=>{try{const ratio=(img.naturalWidth||1200)/(img.naturalHeight||300);if(!Number.isFinite(ratio)||ratio<=0)throw Error('Invalid board preview dimensions');const c=document.createElement('canvas');c.width=2400;c.height=Math.max(1,Math.min(2400,Math.round(2400/ratio)));const ctx=c.getContext('2d',{alpha:false});ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(img,0,0,c.width,c.height);resolve(c.toDataURL('image/png'))}catch(e){reject(e)}finally{URL.revokeObjectURL(url)}};img.onerror=()=>{URL.revokeObjectURL(url);reject(Error('Board preview could not be rendered'))};img.src=url})}
 async function getBoard(){if(source==='builder'){const p=window.RinkboardBridge.getProject();const idx=p.activeBoard;board=p.boards[idx];if(!board)throw Error('No active board');return window.RinkboardBridge.getBoardPreview(idx)}const d=JSON.parse(await api().downloadText(selectedRecord.path));board=d.project?.boards?.[0];if(!board)throw Error('Invalid saved board');return api().downloadText(selectedRecord.path.replace(/\.rinkboard\.json$/i,'.preview.svg'))}
-async function loadTeamLogo(){logoData='';const t=$('bandTeam').value.trim();if(!t){status('Enter a team first');await render();return}try{logoData=await api().downloadLogo(filename(t)+'.png');status('Loaded '+filename(t)+'.png from Dropbox')}catch(e){status('No logo found for '+t+'. Upload a PNG to add one.')}await render()}
+async function loadTeamLogo(){logoData='';const t=$('bandTeam').value.trim();if(!t){status('Enter a team first');await render();return}try{logoData=await api().downloadLogo(filename(t)+'.png');status('Loaded '+filename(t)+'.png from Dropbox')}catch(e){status('No logo found for '+t+'. Upload a PNG, SVG, PDF, or WEBP to add one.')}await render()}
 async function open(from){source=from;selectedRecord=null;selectedBatch=[];logoData='';boardData='';boardSvg='';if(from==='builder'){team=$('builderTeam')?.value||'';season=$('builderSeason')?.value||''}else{const records=api().selectedRecords();if(!records.length){alert('Select one or more rinkboards in the Database to generate bands.');return}selectedBatch=records;selectedRecord=records[0];team=selectedRecord.team;season=selectedRecord.season}
 $('bandExportAll').hidden=source!=='database'||selectedBatch.length<2;modal.hidden=false;const d=new Date();$('bandMonth').value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');$('bandTeam').value=team;$('bandSeason').value=season;status('Loading board…');try{const svg=await getBoard();size='30 x '+(board.settings?.width||selectedRecord?.width||139);$('bandSize').value=size;$('bandSponsor').value=board.settings?.sponsor||selectedRecord?.name||'';boardSvg=svg;boardData=await svgToData(svg);await loadTeamLogo()}catch(e){status(e.message);await render()}}
-$('bandClose').onclick=()=>modal.hidden=true;modal.addEventListener('click',e=>{if(e.target===modal)modal.hidden=true});for(const id of ['bandTeam','bandSeason','bandSize','bandMonth','bandSponsor'])$(id).addEventListener('input',()=>{if(id==='bandTeam')logoData='';render()});$('bandReload').onclick=()=>loadTeamLogo();$('bandLogoUpload').onclick=()=>$('bandLogoFile').click();$('bandLogoFile').onchange=async()=>{const file=$('bandLogoFile').files[0];if(!file)return;try{if(file.type!=='image/png'&&!file.name.toLowerCase().endsWith('.png'))throw Error('Please select a PNG');if(file.size>10*1024*1024)throw Error('PNG must be smaller than 10 MB');const t=$('bandTeam').value.trim();if(!t)throw Error('Enter a team');await api().uploadLogo(filename(t)+'.png',file);status('Saved '+filename(t)+'.png to Dropbox');await loadTeamLogo()}catch(e){status(e.message)}finally{$('bandLogoFile').value=''}};
-// Vector-first PDF: text, outlines and SVG rinkboard stay vector; PNG logos retain their original pixels.
+$('bandClose').onclick=()=>modal.hidden=true;modal.addEventListener('click',e=>{if(e.target===modal)modal.hidden=true});for(const id of ['bandTeam','bandSeason','bandSize','bandMonth','bandSponsor'])$(id).addEventListener('input',()=>{if(id==='bandTeam')logoData='';render()});$('bandReload').onclick=()=>loadTeamLogo();$('bandLogoUpload').onclick=()=>$('bandLogoFile').click();// Convert accepted artwork to a consistent PNG for Dropbox and the canvas/PDF renderer.
+async function logoToPng(file){
+ const ext=(file.name.split('.').pop()||'').toLowerCase();
+ if(!['png','svg','pdf','webp'].includes(ext))throw Error('Choose a PNG, SVG, PDF, or WEBP file');
+ if(file.size>20*1024*1024)throw Error('Logo must be smaller than 20 MB');
+ if(ext==='png')return file;
+ const canvas=document.createElement('canvas');let width,height;
+ if(ext==='pdf'){
+  if(!window.pdfjsLib)throw Error('PDF preview library unavailable');
+  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  const pdf=await pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+  try{const page=await pdf.getPage(1),base=page.getViewport({scale:1});
+   const viewport=page.getViewport({scale:Math.min(4,2400/Math.max(base.width,base.height))});
+   canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
+   await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+  }finally{await pdf.destroy()}
+ }else{
+  let blob=file;
+  if(ext==='svg'){
+   const xml=new DOMParser().parseFromString(await file.text(),'image/svg+xml');
+   if(xml.querySelector('parsererror')||xml.documentElement.localName!=='svg')throw Error('Invalid SVG');
+   xml.querySelectorAll('script,foreignObject,iframe,object,embed').forEach(x=>x.remove());
+   xml.querySelectorAll('*').forEach(el=>[...el.attributes].forEach(a=>{
+    if(/^on/i.test(a.name)||(/href$/i.test(a.name)&&/^(?!#)/i.test(a.value.trim()))||/url\(\s*['"]?(?!#)/i.test(a.value))el.removeAttribute(a.name);
+   }));
+   blob=new Blob([new XMLSerializer().serializeToString(xml.documentElement)],{type:'image/svg+xml'});
+  }
+  const url=URL.createObjectURL(blob);
+  try{const img=await image(url);width=img.naturalWidth;height=img.naturalHeight;
+   if(!width||!height)throw Error('Logo has invalid dimensions');
+   const scale=Math.min(1,2400/Math.max(width,height));
+   canvas.width=Math.max(1,Math.round(width*scale));canvas.height=Math.max(1,Math.round(height*scale));
+   canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+  }finally{URL.revokeObjectURL(url)}
+ }
+ const png=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Could not convert logo to PNG')),'image/png'));
+ return new File([png],filename(file.name.replace(/\.[^.]+$/,''))+'.png',{type:'image/png'});
+}
+$('bandLogoFile').onchange=async()=>{const file=$('bandLogoFile').files[0];if(!file)return;try{const normalized=await logoToPng(file);const t=$('bandTeam').value.trim();if(!t)throw Error('Enter a team');await api().uploadLogo(filename(t)+'.png',normalized);status('Saved '+filename(t)+'.png to Dropbox');await loadTeamLogo()}catch(e){status(e.message)}finally{$('bandLogoFile').value=''}};
+// Vector-first PDF: text, outlines and SVG rinkboard stay vector; uploaded team logos are normalized to PNG for reliable preview/export.
 async function rasterBoard(doc){if(!boardSvg)return;const svgBlob=new Blob([boardSvg],{type:'image/svg+xml'});const url=URL.createObjectURL(svgBlob);try{const img=await image(url);const c=document.createElement('canvas');c.width=2504;c.height=496;const ctx=c.getContext('2d');ctx.drawImage(img,0,0,c.width,c.height);doc.addImage(c.toDataURL('image/png'),'PNG',861,85,313,62)}finally{URL.revokeObjectURL(url)}}
 // Flatten nested Illustrator SVG images into vector elements before sending to svg2pdf.
 // This mirrors the production exporter fix: SVG data URI <image> elements render black in svg2pdf.
