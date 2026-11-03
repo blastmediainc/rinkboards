@@ -4,7 +4,16 @@ const $=id=>document.getElementById(id), API='https://api.dropboxapi.com/2', CON
 const cfgKey='rinkboard-dropbox-settings-v1',tokenKey='rinkboard-dropbox-session-v1',pkceKey='rinkboard-dropbox-pkce-v1';
 let folderChoices={teams:new Set(),seasons:new Set(),sizes:new Set()};
 let config={appKey:'',folder:'/Rinkboard Database'},token=null,entries=[],selectedRecord=null,busy=false,selectedPaths=new Set(),exportQuantities=new Map(),visibleRecords=[];
+const BCHL_TEAMS = ["Alberni Valley Bulldogs", "Cowichan Valley Capitals", "Nanaimo Clippers", "Powell River Kings", "Victoria Grizzlies", "Chilliwack Chiefs", "Coquitlam Express", "Langley Rivermen", "Prince George Spruce Kings", "Surrey Eagles", "Cranbrook Bucks", "Salmon Arm Silverbacks", "Trail Smoke Eaters", "Vernon Vipers", "West Kelowna Warriors", "Blackfalds Bulldogs", "Brooks Bandits", "Okotoks Oilers", "Sherwood Park Crusaders", "Spruce Grove Saints"];
+const bchlFolderKey='rinkboard-bchl-folder-v85';
+let activeBrand=localStorage.getItem('rinkboard-active-brand-v85')==='bchl'?'bchl':'blast';
+let blastFolder='/Rinkboard Database';
+function currentFolder(){return activeBrand==='bchl'?(localStorage.getItem(bchlFolderKey)||'/BCHL Rinkboards'):blastFolder}
+function brandTeams(){return activeBrand==='bchl'?BCHL_TEAMS:[]}
+
 try{config={...config,...JSON.parse(localStorage.getItem(cfgKey)||'{}')};token=JSON.parse(sessionStorage.getItem(tokenKey)||'null')}catch{}
+blastFolder=config.folder||'/Rinkboard Database';
+config.folder=currentFolder();
 function message(s){$('dbMessage').textContent=s}function state(s){$('dbStatus').textContent=s}function sanitize(s){return String(s||'').trim().replace(/[\\/:*?"<>|\x00-\x1f]/g,'-').replace(/^\.+/,'').slice(0,100)||'Untitled'}
 function pathPart(s){return sanitize(s).replace(/\s+/g,' ')}function base(){return config.folder.trim().replace(/\/+$/,'')||'/Rinkboard Database'}
 function parent(team,season,width){return `${base()}/${pathPart(team)}/${pathPart(season)}/30x${pathPart(width)}`}
@@ -27,7 +36,29 @@ async function mkdir(path){try{await rpc('/files/create_folder_v2',{path,autoren
 async function ensureFolders(path){let parts=path.split('/').filter(Boolean),curr='';for(let part of parts){curr+='/'+part;await mkdir(curr)}}
 function setBusy(b){busy=b;for(let id of ['dbSave','dbSaveAll','dbRefresh','dbConnect','dbExportSelected','dbDeleteSelected','builderDbSave','dbRebuildPreviews'])$(id).disabled=b}
 async function perform(fn){if(busy)return;setBusy(true);try{await fn()}catch(e){console.error(e);message(e.message||String(e))}finally{setBusy(false)}}
-function applyConfig(){const nextKey=$('dbAppKey').value.trim(),nextFolder=$('dbFolder').value.trim().replace(/\/+$/,'')||'/Rinkboard Database';const changed=nextFolder!==config.folder||nextKey!==config.appKey;config.appKey=nextKey;config.folder=nextFolder;localStorage.setItem(cfgKey,JSON.stringify(config));if(changed){entries=[];selectedRecord=null;selectedPaths.clear();exportQuantities.clear();visibleRecords=[];render()}message('Settings saved. '+(expired()?'Connect Dropbox to authorize your account.':'Click Refresh to load the selected database.'))}
+function applyConfig(){
+ const nextKey=$('dbAppKey').value.trim(),nextFolder=$('dbFolder').value.trim().replace(/\/+$/,'')||(activeBrand==='bchl'?'/BCHL Rinkboards':'/Rinkboard Database');
+ const changed=nextFolder!==config.folder||nextKey!==config.appKey;
+ config.appKey=nextKey;config.folder=nextFolder;
+ if(activeBrand==='bchl')localStorage.setItem(bchlFolderKey,nextFolder);
+ else {blastFolder=nextFolder;localStorage.setItem(cfgKey,JSON.stringify({appKey:config.appKey,folder:blastFolder}))}
+ if(activeBrand==='bchl')localStorage.setItem(cfgKey,JSON.stringify({appKey:config.appKey,folder:blastFolder}));
+ if(changed){entries=[];selectedRecord=null;selectedPaths.clear();exportQuantities.clear();visibleRecords=[];folderChoices={teams:new Set(),seasons:new Set(),sizes:new Set()};builderChoices();render()}
+ message('Settings saved. '+(expired()?'Connect Dropbox to authorize your account.':'Click Refresh to load the selected database.'));
+}
+async function changeBrand(brand){
+ if(busy){message('Wait for the current Dropbox operation to finish before switching brands.');return}
+ activeBrand=brand==='bchl'?'bchl':'blast';
+ config.folder=currentFolder();
+ $('dbFolder').value=config.folder;
+ entries=[];selectedRecord=null;selectedPaths.clear();exportQuantities.clear();visibleRecords=[];
+ folderChoices={teams:new Set(),seasons:new Set(),sizes:new Set()};
+ $('dbTeam').value='';$('dbSeason').value='';$('builderTeam').value='';$('builderSeason').value='';
+ builderChoices();render();
+ message(activeBrand==='bchl'?'BCHL database: select a team and season.':'Blast Media database restored.');
+ if(!expired())await refresh();
+}
+
 function randomString(){let arr=crypto.getRandomValues(new Uint8Array(32));return Array.from(arr,b=>b.toString(16).padStart(2,'0')).join('')}
 function base64url(bytes){return btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
 async function login(){if(!config.appKey)throw Error('Enter your Dropbox App Key and click Save Settings first.');if(location.protocol!=='https:'&&location.hostname!=='localhost')throw Error('Dropbox login requires HTTPS or localhost. Open your GitHub Pages site.');let verifier=randomString(),hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier)),stateId=randomString();sessionStorage.setItem(pkceKey,JSON.stringify({verifier,state:stateId,returnUrl:location.origin+location.pathname}));let u=new URL('https://www.dropbox.com/oauth2/authorize');u.searchParams.set('client_id',config.appKey);u.searchParams.set('response_type','code');u.searchParams.set('token_access_type','online');u.searchParams.set('code_challenge_method','S256');u.searchParams.set('code_challenge',base64url(new Uint8Array(hash)));u.searchParams.set('redirect_uri',location.origin+location.pathname);u.searchParams.set('state',stateId);location.assign(u.href)}
@@ -39,7 +70,7 @@ async function loadFolderChoices(){folderChoices={teams:new Set(),seasons:new Se
 function builderChoices(){
  const teamEl=$('builderTeam'),seasonEl=$('builderSeason');
  const selectedTeam=teamEl.value,selectedSeason=seasonEl.value;
- const teams=[...new Set([...entries.map(e=>e.team),...folderChoices.teams])].sort((a,b)=>a.localeCompare(b));
+ const teams=[...new Set([...entries.map(e=>e.team),...folderChoices.teams,...brandTeams()])].sort((a,b)=>a.localeCompare(b));
  setOptions('builderTeam',teams,selectedTeam,'','Select team…');
  const team=teamEl.value;
  const seasons=team?[...new Set([...entries.filter(e=>e.team===team).map(e=>e.season),...[...folderChoices.seasons].filter(x=>x.startsWith(team+'/')).map(x=>x.slice(team.length+1))])].sort((a,b)=>a.localeCompare(b)):[];
@@ -80,7 +111,7 @@ async function builderSave(){
  $('builderDbHint').textContent='Saved '+name.name+' to '+ctx.team+' / '+ctx.season+' in Dropbox. Production PDF not regenerated.';
  message('Saved '+name.name+' to '+ctx.team+' / '+ctx.season+'. Production PDF not regenerated.');
 }
-async function refresh(){if(expired()){state('Not connected');message('Connect Dropbox first.');return}state('Connected');let all;try{all=await listAll()}catch(e){if(String(e).includes('not_found')){entries=[];builderChoices();render();message('Shared folder not found. Check its path, then create it in Dropbox or save your first rinkboard.');return}throw e}entries=all.map(parseEntry).filter(Boolean);await loadFolderChoices();builderChoices();selectedPaths=new Set([...selectedPaths].filter(p=>entries.some(e=>e.path===p)));exportQuantities=new Map([...exportQuantities].filter(([p])=>entries.some(e=>e.path===p)));render();message(`${entries.length} rinkboard${entries.length===1?'':'s'} found. Click any artboard name to open it in the editor.`)}
+async function refresh(){if(expired()){state('Not connected');message('Connect Dropbox first.');return}state('Connected');let all;try{all=await listAll()}catch(e){if(String(e).includes('not_found')){entries=[];builderChoices();render();message('Folder not found yet. Select a team and season, then save a rinkboard to create it.');return}throw e}entries=all.map(parseEntry).filter(Boolean);await loadFolderChoices();builderChoices();selectedPaths=new Set([...selectedPaths].filter(p=>entries.some(e=>e.path===p)));exportQuantities=new Map([...exportQuantities].filter(([p])=>entries.some(e=>e.path===p)));render();message(`${entries.length} rinkboard${entries.length===1?'':'s'} found. Click any artboard name to open it in the editor.`)}
 function setOptions(id,values,selected,allValue,allLabel){const el=$(id);el.replaceChildren();const first=document.createElement('option');first.value=allValue;first.textContent=allLabel;el.append(first);for(const value of values){const opt=document.createElement('option');opt.value=value;opt.textContent=id==='dbSize'?value.replace('x','″ × ')+'″':value;el.append(opt)}if(id!=='dbSize'){const add=document.createElement('option');add.value='__add__';add.textContent='+ Add new '+(id==='dbTeam'||id==='builderTeam'?'team':'season')+'…';el.append(add);}el.value=values.includes(selected)?selected:allValue}
 const collapsedSizes=new Set();
 function setAllSizesCollapsed(collapse){
@@ -93,7 +124,7 @@ function setAllSizesCollapsed(collapse){
   if(btn){btn.textContent=collapse?'Show':'Hide';btn.setAttribute('aria-expanded',String(!collapse));}
  });
 }
-function render(){const team=$('dbTeam').value,season=$('dbSeason').value,size=$('dbSize').value,search=$('dbSearch').value.toLowerCase();const teams=[...new Set([...entries.map(x=>x.team),...folderChoices.teams])].sort((a,b)=>a.localeCompare(b));setOptions('dbTeam',teams,team,'','All teams');const seasons=[...new Set([...entries.filter(x=>!team||x.team===team).map(x=>x.season),...([...folderChoices.seasons].filter(x=>x.startsWith(team+"/"))).map(x=>x.slice(team.length+1))])].sort((a,b)=>a.localeCompare(b));setOptions('dbSeason',seasons,season,'','All seasons');const actualSeason=$('dbSeason').value;const matching=entries.filter(x=>(!team||x.team===team)&&(!actualSeason||x.season===actualSeason));const sizes=[...new Set([...matching.map(x=>x.size),...([...folderChoices.sizes].filter(x=>x.startsWith(team+"/"+actualSeason+"/"))).map(x=>x.split("/").pop())])].sort((a,b)=>parseFloat(a.slice(3))-parseFloat(b.slice(3)));setOptions('dbSize',sizes,size,'all','All sizes');let visible=matching.filter(x=>($('dbSize').value==='all'||x.size===$('dbSize').value)&&x.name.toLowerCase().includes(search));visibleRecords=visible;updateSelectionCount();hideHoverPreview();let grid=$('dbGrid');grid.replaceChildren();
+function render(){const team=$('dbTeam').value,season=$('dbSeason').value,size=$('dbSize').value,search=$('dbSearch').value.toLowerCase();const teams=[...new Set([...entries.map(x=>x.team),...folderChoices.teams,...brandTeams()])].sort((a,b)=>a.localeCompare(b));setOptions('dbTeam',teams,team,'','All teams');const seasons=[...new Set([...entries.filter(x=>!team||x.team===team).map(x=>x.season),...([...folderChoices.seasons].filter(x=>x.startsWith(team+"/"))).map(x=>x.slice(team.length+1))])].sort((a,b)=>a.localeCompare(b));setOptions('dbSeason',seasons,season,'','All seasons');const actualSeason=$('dbSeason').value;const matching=entries.filter(x=>(!team||x.team===team)&&(!actualSeason||x.season===actualSeason));const sizes=[...new Set([...matching.map(x=>x.size),...([...folderChoices.sizes].filter(x=>x.startsWith(team+"/"+actualSeason+"/"))).map(x=>x.split("/").pop())])].sort((a,b)=>parseFloat(a.slice(3))-parseFloat(b.slice(3)));setOptions('dbSize',sizes,size,'all','All sizes');let visible=matching.filter(x=>($('dbSize').value==='all'||x.size===$('dbSize').value)&&x.name.toLowerCase().includes(search));visibleRecords=visible;updateSelectionCount();hideHoverPreview();let grid=$('dbGrid');grid.replaceChildren();
 let toolbar=$('dbSizeVisibility');
 if(!toolbar){toolbar=document.createElement('div');toolbar.id='dbSizeVisibility';
  const all=document.createElement('button');all.type='button';all.textContent='Show all sizes';all.onclick=()=>setAllSizesCollapsed(false);
@@ -110,7 +141,7 @@ header.onclick=()=>{const hidden=!section.classList.contains('dbSizeHidden');
  if(hidden)collapsedSizes.add(sizeName);else collapsedSizes.delete(sizeName);
  toggle.textContent=hidden?'Show':'Hide';header.setAttribute('aria-expanded',String(!hidden));};
 header.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();header.click()}};
-header.append(title,count,toggle);section.append(header)}let alphabet=document.createElement('div');alphabet.className='dbAlphabet';for(let letter of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#'){let col=document.createElement('div');col.className='dbColumn';let head=document.createElement('div');head.className='dbLetter';head.textContent=letter;col.append(head);let records=visible.filter(x=>(!sizeName||x.size===sizeName)&&(/^[a-z]/i.test(x.name)?x.name[0].toUpperCase():'#')===letter).sort((a,b)=>a.name.localeCompare(b.name));for(let record of records){let wrapper=document.createElement('div');wrapper.className='dbSelectable';let pick=document.createElement('label');pick.className='dbPick';let check=document.createElement('input');check.type='checkbox';check.checked=selectedPaths.has(record.path);check.setAttribute('aria-label','Select '+record.name+' for export');pick.append(check);let qtyLabel=document.createElement('label');qtyLabel.className='dbExportQty';qtyLabel.title='Number of production copies for this artboard';let qtyText=document.createElement('span');qtyText.textContent='Qty';let qtyInput=document.createElement('input');qtyInput.type='number';qtyInput.min='1';qtyInput.max='500';qtyInput.step='1';qtyInput.inputMode='numeric';qtyInput.value=String(exportQuantities.get(record.path)??1);qtyInput.setAttribute('aria-label','Export quantity for '+record.name);qtyInput.onchange=()=>{const n=Number(qtyInput.value);if(Number.isSafeInteger(n)&&n>=1&&n<=500){exportQuantities.set(record.path,n);qtyInput.setCustomValidity('')}else qtyInput.setCustomValidity('Enter a whole number from 1 to 500')};qtyInput.oninput=()=>{const n=Number(qtyInput.value);qtyInput.setCustomValidity(Number.isSafeInteger(n)&&n>=1&&n<=500?'':'Enter a whole number from 1 to 500');if(qtyInput.validity.valid)exportQuantities.set(record.path,n)};qtyLabel.append(qtyText,qtyInput);check.onchange=()=>{if(check.checked)selectedPaths.add(record.path);else selectedPaths.delete(record.path);wrapper.classList.toggle('dbPicked',check.checked);updateSelectionCount()};wrapper.classList.toggle('dbPicked',check.checked);let tile=document.createElement('button');tile.className='dbTile';tile.style.cssText='min-width:0;flex:1;text-align:left';tile.title=`${record.name} · ${record.team} · ${record.season} · ${record.size} — click to edit`;let label=document.createElement('small');label.textContent=record.name;tile.append(label);tile.onclick=()=>perform(()=>openRecord(record));tile.addEventListener('pointerenter',e=>showHoverPreview(record,e));tile.addEventListener('pointermove',moveHoverPreview);tile.addEventListener('pointerleave',hideHoverPreview);tile.addEventListener('focus',e=>showHoverPreview(record,e));tile.addEventListener('blur',hideHoverPreview);wrapper.append(pick,qtyLabel,tile);col.append(wrapper)}if(records.length)alphabet.append(col)}section.append(alphabet);grid.append(section)}}
+header.append(title,count,toggle);section.append(header)}let alphabet=document.createElement('div');alphabet.className='dbAlphabet';for(let letter of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#'){let col=document.createElement('div');col.className='dbColumn';let head=document.createElement('div');head.className='dbLetter';head.textContent=letter;col.append(head);let records=visible.filter(x=>(!sizeName||x.size===sizeName)&&(/^[a-z]/i.test(x.name)?x.name[0].toUpperCase():'#')===letter).sort((a,b)=>a.name.localeCompare(b.name));for(let record of records){let wrapper=document.createElement('div');wrapper.className='dbSelectable';let pick=document.createElement('label');pick.className='dbPick';let check=document.createElement('input');check.type='checkbox';check.checked=selectedPaths.has(record.path);check.setAttribute('aria-label','Select '+record.name+' for export');pick.append(check);let qtyLabel=document.createElement('label');qtyLabel.className='dbExportQty';qtyLabel.title='Number of production copies for this artboard';let qtyText=document.createElement('span');qtyText.textContent='Qty';let qtyInput=document.createElement('input');qtyInput.type='number';qtyInput.min='1';qtyInput.max='500';qtyInput.step='1';qtyInput.inputMode='numeric';qtyInput.value=String(exportQuantities.get(record.path)??1);qtyInput.setAttribute('aria-label','Export quantity for '+record.name);qtyInput.onchange=()=>{const n=Number(qtyInput.value);if(Number.isSafeInteger(n)&&n>=1&&n<=500){exportQuantities.set(record.path,n);qtyInput.setCustomValidity('')}else qtyInput.setCustomValidity('Enter a whole number from 1 to 500')};qtyInput.oninput=()=>{const n=Number(qtyInput.value);qtyInput.setCustomValidity(Number.isSafeInteger(n)&&n>=1&&n<=500?'':'Enter a whole number from 1 to 500');if(qtyInput.validity.valid)exportQuantities.set(record.path,n)};qtyLabel.append(qtyText,qtyInput);check.onchange=()=>{if(check.checked)selectedPaths.add(record.path);else selectedPaths.delete(record.path);wrapper.classList.toggle('dbPicked',check.checked);updateSelectionCount()};wrapper.classList.toggle('dbPicked',check.checked);let tile=document.createElement('button');tile.className='dbTile';tile.style.cssText='min-width:0;flex:1;text-align:left';tile.title=`${record.name} · ${record.team} · ${record.season} · ${record.size} — click to edit`;let label=document.createElement('small');label.textContent=record.name;tile.append(label);scheduleCardPreview(tile,record);tile.onclick=()=>perform(()=>openRecord(record));tile.addEventListener('pointerenter',e=>showHoverPreview(record,e));tile.addEventListener('pointermove',moveHoverPreview);tile.addEventListener('pointerleave',hideHoverPreview);tile.addEventListener('focus',e=>showHoverPreview(record,e));tile.addEventListener('blur',hideHoverPreview);wrapper.append(pick,qtyLabel,tile);col.append(wrapper)}if(records.length)alphabet.append(col)}section.append(alphabet);grid.append(section)}}
 
 function updateSelectionCount(){const n=selectedPaths.size;$('dbSelectionCount').textContent=n+' selected';}
 function downloadPdf(bytes,name){const blob=new Blob([bytes],{type:'application/pdf'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000)}
@@ -206,7 +237,18 @@ async function showHoverPreview(record,e){
   image.src=hoverPreviewObjectUrl;body.replaceChildren(image);moveHoverPreview(e);
  }catch(err){if(request===hoverPreviewRequest){body.textContent='Preview unavailable';moveHoverPreview(e)}}
 }
-async function loadPreview(tile,record){try{let svg=await download(record.path.replace(/\.rinkboard\.json$/i,'.preview.svg'));if(!tile.isConnected)return;let blob=new Blob([svg],{type:'image/svg+xml'}),url=URL.createObjectURL(blob),img=document.createElement('img');img.alt=record.name;img.onload=()=>URL.revokeObjectURL(url);img.onerror=()=>URL.revokeObjectURL(url);img.src=url;tile.prepend(img)}catch{}}
+// Only fetch previews as cards enter the visible database viewport.
+let previewObserver;
+function scheduleCardPreview(tile,record){
+ if(!('IntersectionObserver' in window)){loadPreview(tile,record);return}
+ if(!previewObserver)previewObserver=new IntersectionObserver(items=>{
+  for(const item of items){if(!item.isIntersecting)continue;previewObserver.unobserve(item.target);
+   const rec=item.target._previewRecord;if(rec)loadPreview(item.target,rec);
+  }
+ },{root:null,rootMargin:'150px'});
+ tile._previewRecord=record;previewObserver.observe(tile);
+}
+async function loadPreview(tile,record){try{const path=record.path.replace(/\.rinkboard\.json$/i,'.preview.svg');let svg=hoverPreviewCache.get(path);if(!svg){svg=await download(path);hoverPreviewCache.set(path,svg)}if(!tile.isConnected)return;let blob=new Blob([svg],{type:'image/svg+xml'}),url=URL.createObjectURL(blob),img=document.createElement('img');img.alt=record.name;img.onload=()=>URL.revokeObjectURL(url);img.onerror=()=>URL.revokeObjectURL(url);img.src=url;tile.prepend(img)}catch{}}
 function activeBoard(){let obj=window.RinkboardBridge.getProject();return {obj,board:obj.boards[obj.activeBoard]}}
 function context(){let team=$('dbTeam').value.trim(),season=$('dbSeason').value.trim();if(!team||!season)throw Error('Enter a team and season before saving.');return {team,season}}
 async function saveOne(index,ctx){
@@ -277,6 +319,7 @@ async function rebuildSelectedPreviews(){
 }
 
 async function openRecord(record){let data=parseSavedProject(await download(record.path),record);if(!data.project||!Array.isArray(data.project.boards))throw Error('This is not a valid Rinkboard Builder database entry');if(!confirm(`Open ${record.name} in the editor? Unsaved edits in the current project will be lost.`))return;window.RinkboardBridge.openProject(data.project);selectedRecord=record;$('dbTeam').value=record.team;$('dbSeason').value=record.season;builderChoices();$('builderTeam').value=record.team;builderChoices();$('builderSeason').value=record.season;syncBuilderProjectSeason();$('dbOverlay').hidden=true;message(`Opened ${record.name}. Save Current Artboard to update it in Dropbox.`)}
+window.addEventListener('rinkboard-brand-changed',event=>{if(event.detail.brand!==activeBrand)perform(()=>changeBrand(event.detail.brand))});
 window.RinkboardBandDropbox={
  downloadText:download,
  selectedRecords:()=>entries.filter(e=>selectedPaths.has(e.path)),
