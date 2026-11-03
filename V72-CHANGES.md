@@ -1,0 +1,1 @@
+V72: Saving to Dropbox uploads editable .rinkboard.json first and does NOT generate/upload Production PDFs. Preview SVG upload happens asynchronously after save. Use export controls for PDF. Existing production PDFs in Dropbox are NOT refreshed by saving; they may be stale. No live Dropbox test performed.

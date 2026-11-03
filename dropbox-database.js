@@ -67,8 +67,8 @@ async function builderSave(){
  const project=window.RinkboardBridge.getProject();
  const name=await saveOne(project.activeBoard,ctx);
  render();
- $('builderDbHint').textContent='Saved '+name+' to '+ctx.team+' / '+ctx.season+' in Dropbox.';
- message('Saved '+name+' to '+ctx.team+' / '+ctx.season+'.');
+ $('builderDbHint').textContent='Saved '+name.name+' to '+ctx.team+' / '+ctx.season+' in Dropbox. Production PDF not regenerated.';
+ message('Saved '+name.name+' to '+ctx.team+' / '+ctx.season+'. Production PDF not regenerated.');
 }
 async function refresh(){if(expired()){state('Not connected');message('Connect Dropbox first.');return}state('Connected');let all;try{all=await listAll()}catch(e){if(String(e).includes('not_found')){entries=[];builderChoices();render();message('Shared folder not found. Check its path, then create it in Dropbox or save your first rinkboard.');return}throw e}entries=all.map(parseEntry).filter(Boolean);await loadFolderChoices();builderChoices();selectedPaths=new Set([...selectedPaths].filter(p=>entries.some(e=>e.path===p)));exportQuantities=new Map([...exportQuantities].filter(([p])=>entries.some(e=>e.path===p)));render();message(`${entries.length} rinkboard${entries.length===1?'':'s'} found. Click any artboard name to open it in the editor.`)}
 function setOptions(id,values,selected,allValue,allLabel){const el=$(id);el.replaceChildren();const first=document.createElement('option');first.value=allValue;first.textContent=allLabel;el.append(first);for(const value of values){const opt=document.createElement('option');opt.value=value;opt.textContent=id==='dbSize'?value.replace('x','″ × ')+'″':value;el.append(opt)}if(id!=='dbSize'){const add=document.createElement('option');add.value='__add__';add.textContent='+ Add new '+(id==='dbTeam'||id==='builderTeam'?'team':'season')+'…';el.append(add);}el.value=values.includes(selected)?selected:allValue}
@@ -199,18 +199,39 @@ async function showHoverPreview(record,e){
 async function loadPreview(tile,record){try{let svg=await download(record.path.replace(/\.rinkboard\.json$/i,'.preview.svg'));if(!tile.isConnected)return;let blob=new Blob([svg],{type:'image/svg+xml'}),url=URL.createObjectURL(blob),img=document.createElement('img');img.alt=record.name;img.onload=()=>URL.revokeObjectURL(url);img.onerror=()=>URL.revokeObjectURL(url);img.src=url;tile.prepend(img)}catch{}}
 function activeBoard(){let obj=window.RinkboardBridge.getProject();return {obj,board:obj.boards[obj.activeBoard]}}
 function context(){let team=$('dbTeam').value.trim(),season=$('dbSeason').value.trim();if(!team||!season)throw Error('Enter a team and season before saving.');return {team,season}}
-async function saveOne(index,ctx){let project=window.RinkboardBridge.getProject(),board=project.boards[index];if(!board)throw Error('Invalid artboard');let name=board.settings.sponsor?.trim();if(!name)throw Error(`Artboard ${index+1} needs a sponsor name.`);let width=String(parseFloat(board.settings.width||147));if(!Number.isFinite(Number(width))||Number(width)<=0)throw Error('Invalid board width');let folder=parent(ctx.team,ctx.season,width),path=folder+'/'+pathPart(name)+'.rinkboard.json';await ensureFolders(folder);let current=entries.find(e=>e.path.toLowerCase()===path.toLowerCase());if(current&&selectedRecord?.path.toLowerCase()!==path.toLowerCase()&&!confirm(`A rinkboard named ${name} already exists in this team/season/size. Replace it?`))throw Error('Save cancelled.');let rev=selectedRecord?.path.toLowerCase()===path.toLowerCase()?selectedRecord.rev:current?.rev;
-// Each database item is an independently editable one-artboard project.
-let payload={format:'rinkboard-db-v1',team:ctx.team,season:ctx.season,sponsor:name,width,updatedAt:new Date().toISOString(),project:{version:2,boards:[board],activeBoard:0}};
-// Full-scale production PDF (100%, 30-inch height, no bleed) is stored alongside the editable JSON.
-let pdfBytes;try{pdfBytes=await window.RinkboardBridge.getBoardProductionPdf(index)}catch(e){throw Error('Full-scale PDF could not be generated; nothing was saved: '+e.message)}
-let pdfPath=path.replace(/\.rinkboard\.json$/i,'.production-100pct.pdf');
-// Upload PDF with revision protection if it already exists; don't silently overwrite another employee's work.
-let pdfRev=null;try{let m=await rpc('/files/get_metadata',{path:pdfPath});pdfRev=m.rev}catch(e){if(!String(e).includes('not_found'))throw e}
-await upload(pdfPath,pdfBytes,pdfRev);
-let meta=await upload(path,JSON.stringify(payload),rev);try{let svg=window.RinkboardBridge.getBoardPreview(index);await upload(path.replace(/\.rinkboard\.json$/i,'.preview.svg'),svg,null,true)}catch(previewError){console.warn('Preview generation failed',previewError)}let record=parseEntry(meta);if(record){entries=entries.filter(x=>x.path.toLowerCase()!==path.toLowerCase());entries.push(record);selectedRecord=record;folderChoices.teams.add(record.team);folderChoices.seasons.add(record.team+'/'+record.season);folderChoices.sizes.add(record.team+'/'+record.season+'/'+record.size);builderChoices()}return name}
-async function saveCurrent(){let ctx=context(),obj=window.RinkboardBridge.getProject(),name=await saveOne(obj.activeBoard,ctx);render();message(`Saved ${name} and its full-scale production PDF to Dropbox (${ctx.team} / ${ctx.season}).`)}
-async function saveAll(){let ctx=context(),obj=window.RinkboardBridge.getProject();let done=[];for(let i=0;i<obj.boards.length;i++){done.push(await saveOne(i,ctx))}render();message(`Saved ${done.length} artboards with full-scale production PDFs to ${ctx.team} / ${ctx.season}.`)}
+async function saveOne(index,ctx){
+ const project=window.RinkboardBridge.getProject(),board=project.boards[index];
+ if(!board)throw Error('Invalid artboard');
+ const name=board.settings.sponsor?.trim();
+ if(!name)throw Error(`Artboard ${index+1} needs a sponsor name.`);
+ const width=String(parseFloat(board.settings.width||147));
+ if(!Number.isFinite(Number(width))||Number(width)<=0)throw Error('Invalid board width');
+ const folder=parent(ctx.team,ctx.season,width),path=folder+'/'+pathPart(name)+'.rinkboard.json';
+ await ensureFolders(folder);
+ const samePath=selectedRecord&&selectedRecord.path.toLowerCase()===path.toLowerCase();
+ const editingExisting=!!selectedRecord&&index===project.activeBoard;
+ // Never silently create a duplicate if the user renamed an opened record.
+ if(editingExisting&&!samePath){
+  const answer=confirm('This artboard was opened from Dropbox as "'+selectedRecord.name+'". Its name, size or folder has changed.\n\nOK: Save as a NEW record (the original stays).\nCancel: Stop and keep the original unchanged.');
+  if(!answer)throw Error('Save cancelled. To overwrite the original, restore its original name, team, season and width.');
+ }
+ // Get a fresh revision from Dropbox so overwrites target the exact existing file.
+ let existing=null;
+ try{existing=await rpc('/files/get_metadata',{path})}catch(e){if(!String(e).includes('not_found'))throw e}
+ if(existing&&!samePath&&!confirm('A rinkboard named '+name+' already exists in this folder. Overwrite it?'))throw Error('Save cancelled.');
+ if(samePath&&existing&&selectedRecord.rev&&existing.rev!==selectedRecord.rev)throw Error('This artboard was changed in Dropbox since you opened it. Refresh and reopen before overwriting.');
+ const payload={format:'rinkboard-db-v1',team:ctx.team,season:ctx.season,sponsor:name,width,updatedAt:new Date().toISOString(),project:{version:2,boards:[board],activeBoard:0}};
+ // Save the editable project FIRST. A failed PDF must never prevent saving edits.
+ const meta=await upload(path,JSON.stringify(payload),existing?.rev||null);
+ const record=parseEntry(meta);
+ if(record){entries=entries.filter(x=>x.path.toLowerCase()!==path.toLowerCase());entries.push(record);selectedRecord=record;folderChoices.teams.add(record.team);folderChoices.seasons.add(record.team+'/'+record.season);folderChoices.sizes.add(record.team+'/'+record.season+'/'+record.size);builderChoices()}
+ try{const svg=window.RinkboardBridge.getBoardPreview(index);void upload(path.replace(/\.rinkboard\.json$/i,'.preview.svg'),svg,null,true).catch(e=>console.warn('Preview update failed',e))}catch(e){console.warn('Preview generation failed',e)}
+ // V72: saving editable artwork must not invoke the expensive production PDF engine.
+ // The existing production PDF, if any, is not refreshed by this operation.
+ return {name,pdfSaved:false,pdfError:'Production PDF not regenerated; export it separately when ready.'};
+}
+async function saveCurrent(){const ctx=context(),obj=window.RinkboardBridge.getProject(),result=await saveOne(obj.activeBoard,ctx);render();message(`Saved ${result.name} to Dropbox. Production PDF not regenerated; export it separately when ready.`)}
+async function saveAll(){const ctx=context(),obj=window.RinkboardBridge.getProject(),done=[];for(let i=0;i<obj.boards.length;i++)done.push(await saveOne(i,ctx));render();message(`Saved ${done.length} editable artboards to Dropbox. Production PDFs not regenerated; export separately when ready.`)}
 async function openRecord(record){let data=JSON.parse(await download(record.path));if(!data.project||!Array.isArray(data.project.boards))throw Error('This is not a valid Rinkboard Builder database entry');if(!confirm(`Open ${record.name} in the editor? Unsaved edits in the current project will be lost.`))return;window.RinkboardBridge.openProject(data.project);selectedRecord=record;$('dbTeam').value=record.team;$('dbSeason').value=record.season;builderChoices();$('builderTeam').value=record.team;builderChoices();$('builderSeason').value=record.season;syncBuilderProjectSeason();$('dbOverlay').hidden=true;message(`Opened ${record.name}. Save Current Artboard to update it in Dropbox.`)}
 window.RinkboardBandDropbox={
  downloadText:download,
