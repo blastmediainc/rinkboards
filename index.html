@@ -856,6 +856,9 @@ ATTN:
  const bulk=card('⇧','Bulk import','Paste or upload a production list to match artwork by sponsor and width.');
  move('dbBulkOpen',bulk);
  const saved=card('▣','Saved selections','Load an existing wave or save your current artwork selection.');
+ const scopeBox=create('div','dbxGroupScope',saved);
+ const teamLabel=create('label','',scopeBox);teamLabel.textContent='Team';const teamSelect=create('select','',teamLabel);teamSelect.id='dbGroupTeam';teamSelect.setAttribute('aria-label','Saved selections team');
+ const seasonLabel=create('label','',scopeBox);seasonLabel.textContent='Season / Year';const seasonSelect=create('select','',seasonLabel);seasonSelect.id='dbGroupSeason';seasonSelect.setAttribute('aria-label','Saved selections season');
  const picker=create('div','dbxGroupPicker',saved);
  move('dbGroupSelect',picker);move('dbGroupLoad',picker);
  const groupActions=create('div','dbxGroupActions',saved);

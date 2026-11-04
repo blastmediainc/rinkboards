@@ -35,7 +35,20 @@ async function switchDatabaseBrand(next){
 // V99 — named selection groups. Store only paths and quantities, never artwork or credentials.
 // V111 — selections are scoped to the selected team AND season, not globally by brand.
 const groupLegacyKey=()=>`rinkboard-selection-groups-v99:${activeBrand}:${base().toLowerCase()}`;
-function groupScope(){return {team:$('dbTeam').value.trim(),season:$('dbSeason').value.trim()}}
+function groupScope(){return {team:($('dbGroupTeam')?.value||'').trim(),season:($('dbGroupSeason')?.value||'').trim()}}
+function groupScopeOptions(){
+ const teamSel=$('dbGroupTeam'),seasonSel=$('dbGroupSeason');if(!teamSel||!seasonSel)return;
+ const currentTeam=teamSel.value||$('dbTeam').value;
+ const teams=[...new Set([...entries.filter(e=>!isLeague(e)).map(e=>e.team),...[...folderChoices.teams].filter(t=>activeBrand!=='bchl'||t!==LEAGUE_TEAM),...presetTeams()])].filter(Boolean).sort((a,b)=>a.localeCompare(b));
+ teamSel.replaceChildren(new Option('Select team…',''));for(const team of teams)teamSel.add(new Option(team,team));
+ teamSel.value=teams.includes(currentTeam)?currentTeam:'';
+ const currentSeason=seasonSel.value||$('dbSeason').value;
+ const team=teamSel.value;
+ const seasons=[...new Set([...entries.filter(e=>inTeam(e,team)).map(e=>e.season),...[...folderChoices.seasons].filter(x=>x.startsWith(team+'/')).map(x=>x.slice(team.length+1))])].filter(Boolean).sort((a,b)=>a.localeCompare(b));
+ seasonSel.replaceChildren(new Option('Select season…',''));for(const season of seasons)seasonSel.add(new Option(season,season));
+ seasonSel.value=seasons.includes(currentSeason)?currentSeason:'';
+}
+
 function groupStorageKey(){const {team,season}=groupScope();return `rinkboard-selection-groups-v111:${activeBrand}:${base().toLowerCase()}:${encodeURIComponent(team)}:${encodeURIComponent(season)}`}
 function scopedItems(items,team,season){return Array.isArray(items)?items.filter(item=>{const e=entries.find(r=>r.path===item?.path);return e&&inScope(e,team,season)}):[]}
 function getGroups(){
@@ -51,6 +64,7 @@ function getGroups(){
 }
 function groupStatus(s){const el=$('dbGroupStatus');if(el)el.textContent=s}
 function groupRender(){
+ groupScopeOptions();
  const sel=$('dbGroupSelect');if(!sel)return;
  const {team,season}=groupScope(),ready=!!(team&&season),current=sel.value;
  const groups=ready?getGroups():{};
@@ -75,6 +89,7 @@ function groupLoad(){
  const {team,season}=groupScope(),name=$('dbGroupSelect').value,group=getGroups()[name];
  if(!name||!Array.isArray(group)){groupStatus('Choose a saved group first.');return}
  const restored=scopedItems(group,team,season),missing=group.length-restored.length;
+ $('dbTeam').value=team;render();$('dbSeason').value=season;render();
  selectedPaths.clear();exportQuantities.clear();
  for(const item of restored){selectedPaths.add(item.path);const q=Number(item.qty);exportQuantities.set(item.path,Number.isSafeInteger(q)&&q>=1&&q<=500?q:1)}
  render();groupStatus('Loaded "'+name+'" for '+team+' / '+season+': '+restored.length+' designs'+(missing?' ('+missing+' unavailable)':'')+'.');
@@ -383,7 +398,7 @@ function bulkResetMatches(){bulkRows=[];bulkEl('dbBulkRows').replaceChildren();b
 function bulkFillSelect(el,values,current,placeholder){el.replaceChildren(new Option(placeholder,''));for(const v of values)el.add(new Option(v,v));el.value=values.includes(current)?current:''}
 function bulkUpdateSeasons(current){const team=bulkEl('dbBulkTeam').value;const seasons=[...new Set([...entries.filter(e=>inTeam(e,team)).map(e=>e.season),...[...folderChoices.seasons].filter(s=>s.startsWith(team+'/')).map(s=>s.slice(team.length+1))])].sort((a,b)=>a.localeCompare(b));bulkFillSelect(bulkEl('dbBulkSeason'),seasons,current,'Select season…')}
 function bulkOpenScope(){const teams=[...new Set([...entries.filter(e=>!isLeague(e)).map(e=>e.team),...[...folderChoices.teams].filter(t=>activeBrand!=='bchl'||t!==LEAGUE_TEAM),...presetTeams()])].sort((a,b)=>a.localeCompare(b));const currentTeam=bulkEl('dbBulkTeam').value||$('dbTeam').value;const currentSeason=bulkEl('dbBulkSeason').value||$('dbSeason').value;bulkFillSelect(bulkEl('dbBulkTeam'),teams,currentTeam,'Select team…');bulkUpdateSeasons(currentSeason)}
-function bulkSyncDatabase(){const {team,season}=bulkScope();$('dbTeam').value=team;$('dbSeason').value='';render();$('dbSeason').value=season;render();groupRender();if($('dbTeam').value!==team||$('dbSeason').value!==season)throw Error('Could not apply the selected team and season to the Database. Refresh the database and try again.')}
+function bulkSyncDatabase(){const {team,season}=bulkScope();$('dbTeam').value=team;$('dbSeason').value='';render();$('dbSeason').value=season;render();if($('dbGroupTeam')){$('dbGroupTeam').value=team;groupScopeOptions();$('dbGroupSeason').value=season;}groupRender();if($('dbTeam').value!==team||$('dbSeason').value!==season)throw Error('Could not apply the selected team and season to the Database. Refresh the database and try again.')}
 
 function bulkCandidatesFor(row,scope){const w=bulkWidth(row.width);if(!Number.isFinite(w))return [];return entries.filter(e=>inScope(e,scope.team,scope.season)&&Number(e.width)===w)}
 // V101: contextual sponsor matching. The width gate is never relaxed.
@@ -426,7 +441,10 @@ $('dbBulkMatch').onclick=bulkMatch;
 $('dbBulkApply').onclick=bulkApply;
 $('dbBulkExport').onclick=()=>{bulkEl('dbBulkOverlay').hidden=true;$('dbExportProof').checked=true;perform(exportSelected)};
 
-updateLeagueControl();$('databaseOpen').onclick=()=>{$('dbOverlay').hidden=false;if(!expired()&&!entries.length)perform(refresh)};$('dbClose').onclick=()=>{$('dbOverlay').hidden=true};$('dbOverlay').addEventListener('click',e=>{if(e.target===$('dbOverlay'))$('dbOverlay').hidden=true});$('dbAppKey').value=config.appKey;$('dbFolder').value=config.folder;$('dbApply').onclick=applyConfig;$('dbConnect').onclick=()=>perform(login);$('dbRefresh').onclick=()=>perform(refresh);$('dbRebuildPreviews').onclick=()=>perform(rebuildSelectedPreviews);$('dbSave').onclick=()=>perform(saveCurrent);$('dbSaveAll').onclick=()=>perform(saveAll);$('dbGroupSave').onclick=groupSave;$('dbGroupLoad').onclick=groupLoad;$('dbGroupDelete').onclick=groupDelete;groupRender();$('dbSelectVisible').onclick=()=>{visibleRecords.forEach(r=>selectedPaths.add(r.path));render()};$('dbClearSelection').onclick=()=>{selectedPaths.clear();render()};$('dbExportSelected').onclick=()=>perform(exportSelected);$('dbDeleteSelected').onclick=()=>perform(deleteSelected);for(let id of ['dbTeam','dbSeason','dbSize'])$(id).addEventListener('change',()=>{if($(id).value==='__add__'){perform(()=>addCategory(id));return}if(id==='dbTeam'){$('dbSeason').value='';$('dbSize').value='all'}if(id==='dbSeason')$('dbSize').value='all';render();if(id==='dbTeam'||id==='dbSeason')groupRender()});$('dbSearch').addEventListener('input',render);if(!expired()){state('Connected');refresh().catch(e=>{console.error(e);message(e.message)})}completeOAuth().catch(e=>{console.error(e);message(e.message)});
+updateLeagueControl();$('databaseOpen').onclick=()=>{$('dbOverlay').hidden=false;if(!expired()&&!entries.length)perform(refresh)};$('dbClose').onclick=()=>{$('dbOverlay').hidden=true};$('dbOverlay').addEventListener('click',e=>{if(e.target===$('dbOverlay'))$('dbOverlay').hidden=true});$('dbAppKey').value=config.appKey;$('dbFolder').value=config.folder;$('dbApply').onclick=applyConfig;$('dbConnect').onclick=()=>perform(login);$('dbRefresh').onclick=()=>perform(refresh);$('dbRebuildPreviews').onclick=()=>perform(rebuildSelectedPreviews);$('dbSave').onclick=()=>perform(saveCurrent);$('dbSaveAll').onclick=()=>perform(saveAll);$('dbGroupSave').onclick=groupSave;$('dbGroupLoad').onclick=groupLoad;$('dbGroupDelete').onclick=groupDelete;groupRender();
+ $('dbGroupTeam')?.addEventListener('change',()=>{$('dbGroupSeason').value='';groupRender()});
+ $('dbGroupSeason')?.addEventListener('change',groupRender);
+ $('dbSelectVisible').onclick=()=>{visibleRecords.forEach(r=>selectedPaths.add(r.path));render()};$('dbClearSelection').onclick=()=>{selectedPaths.clear();render()};$('dbExportSelected').onclick=()=>perform(exportSelected);$('dbDeleteSelected').onclick=()=>perform(deleteSelected);for(let id of ['dbTeam','dbSeason','dbSize'])$(id).addEventListener('change',()=>{if($(id).value==='__add__'){perform(()=>addCategory(id));return}if(id==='dbTeam'){$('dbSeason').value='';$('dbSize').value='all'}if(id==='dbSeason')$('dbSize').value='all';render();if(id==='dbTeam'||id==='dbSeason')groupRender()});$('dbSearch').addEventListener('input',render);if(!expired()){state('Connected');refresh().catch(e=>{console.error(e);message(e.message)})}completeOAuth().catch(e=>{console.error(e);message(e.message)});
 
 // V96 Courier Label: use the exact database selection and its export quantities.
 const courierEl=id=>document.getElementById(id);
