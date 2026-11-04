@@ -69,10 +69,20 @@ async function loadTeamLogo(){
    await render();return;
   }catch(e){if(e.message!=='Team logo not found')throw e}
  }
+ // V132: Bundled Los Angeles Kings logo is available without a Dropbox upload.
+ // A user-uploaded Dropbox logo always takes priority over this default.
+ if(/^los angeles kings$/i.test(t)){
+  logoData=await fetch('los-angeles-kings.png').then(async r=>{
+   if(!r.ok)throw Error('Bundled Los Angeles Kings logo could not be loaded');
+   const blob=await r.blob();
+   return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('Could not read Kings logo'));reader.readAsDataURL(blob)});
+  });
+  logoFormat='png';status('Loaded bundled Los Angeles Kings logo');await render();return;
+ }
  status('No logo found for '+t+'. Upload a PNG, SVG, PDF, or WEBP to add one.');await render();
 }
 async function open(from){source=from;selectedRecord=null;selectedBatch=[];logoData='';logoFormat='';boardData='';boardSvg='';if(from==='builder'){team=$('builderTeam')?.value||'';season=$('builderSeason')?.value||''}else{const records=api().selectedRecords();if(!records.length){alert('Select one or more rinkboards in the Database to generate bands.');return}selectedBatch=records;selectedRecord=records[0];team=($('dbTeam')?.value||'').trim();if(!team||isLeagueWide(team))team=isLeagueWide(selectedRecord.team)?'':selectedRecord.team;season=selectedRecord.season}
-$('bandExportAll').hidden=source!=='database'||selectedBatch.length<2;const choices=$('bandTeamChoices');choices.replaceChildren();const teamNames=[...document.querySelectorAll('#dbTeam option, #builderTeam option')].map(o=>o.value).filter(t=>t&&!isLeagueWide(t));for(const t of [...new Set(teamNames)]){const o=document.createElement('option');o.value=t;choices.append(o)}modal.hidden=false;const d=new Date();$('bandMonth').value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');$('bandTeam').value=team;$('bandSeason').value=season;status('Loading board…');try{const svg=await getBoard();size='30 x '+(board.settings?.width||selectedRecord?.width||139);$('bandSize').value=size;$('bandSponsor').value=board.settings?.sponsor||selectedRecord?.name||'';boardSvg=svg;boardData=await svgToData(svg);await loadTeamLogo()}catch(e){status(e.message);await render()}}
+$('bandExportAll').hidden=source!=='database'||selectedBatch.length<2;const choices=$('bandTeamChoices');choices.replaceChildren();const teamNames=[...document.querySelectorAll('#dbTeam option, #builderTeam option')].map(o=>o.value).filter(t=>t&&!isLeagueWide(t));teamNames.push('Los Angeles Kings');for(const t of [...new Set(teamNames)]){const o=document.createElement('option');o.value=t;choices.append(o)}modal.hidden=false;const d=new Date();$('bandMonth').value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');$('bandTeam').value=team;$('bandSeason').value=season;status('Loading board…');try{const svg=await getBoard();size='30 x '+(board.settings?.width||selectedRecord?.width||139);$('bandSize').value=size;$('bandSponsor').value=board.settings?.sponsor||selectedRecord?.name||'';boardSvg=svg;boardData=await svgToData(svg);await loadTeamLogo()}catch(e){status(e.message);await render()}}
 $('bandClose').onclick=()=>modal.hidden=true;modal.addEventListener('click',e=>{if(e.target===modal)modal.hidden=true});for(const id of ['bandTeam','bandSeason','bandSize','bandMonth','bandSponsor'])$(id).addEventListener('input',()=>{if(id==='bandTeam'){logoData='';logoFormat='';status('Team changed — click Load team logo, or choose a team from the list.')}render()});$('bandTeam').addEventListener('change',()=>loadTeamLogo().catch(e=>status(e.message)));$('bandReload').onclick=()=>loadTeamLogo();$('bandLogoUpload').onclick=()=>$('bandLogoFile').click();// Store the ORIGINAL artwork in Dropbox. Never flatten SVG or PDF logos.
 $('bandLogoFile').onchange=async()=>{
  const file=$('bandLogoFile').files[0];if(!file)return;
