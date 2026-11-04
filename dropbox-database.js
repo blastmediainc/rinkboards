@@ -172,9 +172,10 @@ async function builderAddCategory(type){
  if(raw===null){builderChoices();return;}
  const name=raw.trim();
  if(!name||name==='.'||name==='..'||/[\\/:*?"<>|]/.test(name)){builderChoices();throw Error('Enter a valid name without slashes or special filename characters.');}
- if(expired()){builderChoices();throw Error('Connect Dropbox in the Database panel before adding a team or season.');}
  const folder=type==='team'?base()+'/'+name:base()+'/'+team+'/'+name;
- await ensureFolders(folder);
+ // A disconnected Dropbox must not make the menu appear unresponsive.
+ // Keep the season selectable locally; Dropbox folder will be created on save.
+ if(!expired())await ensureFolders(folder);
  if(type==='team')folderChoices.teams.add(name);else folderChoices.seasons.add(team+'/'+name);
  // Restore the actual selected team before rebuilding options. Never retain the + Add sentinel.
  teamEl.value=type==='team'?'':team;
@@ -183,7 +184,7 @@ async function builderAddCategory(type){
  if(type==='team'){teamEl.value=name;builderChoices();}
  else{teamEl.value=team;seasonEl.value=name;}
  syncBuilderProjectSeason();render();groupRender();
- message('Created '+type+' '+name+' in '+activeBrand.toUpperCase()+' Dropbox database.');
+ message('Added '+type+' '+name+(expired()?' locally. Connect Dropbox to save artwork.':' in '+activeBrand.toUpperCase()+' Dropbox database.'));
 }
 async function builderSave(){
  if(expired())throw Error('Connect Dropbox from the Database panel before saving.');
@@ -393,8 +394,23 @@ window.RinkboardBandDropbox={
 window.addEventListener('rinkboard-brand-changed',event=>perform(()=>switchDatabaseBrand(event.detail.brand)));
 $('builderDbSave').onclick=()=>perform(builderSave);
 $('builderTeam').addEventListener('change',()=>{if($('builderTeam').value==='__add__'){perform(()=>builderAddCategory('team'));return}$('builderSeason').value='';builderChoices();syncBuilderProjectSeason()});
-$('builderSeason').addEventListener('change',()=>{if($('builderSeason').value==='__add__'){perform(()=>builderAddCategory('season'));return}syncBuilderProjectSeason()});
-const addSeasonBtn=$('builderAddSeasonBtn');if(addSeasonBtn)addSeasonBtn.addEventListener('click',()=>perform(()=>builderAddCategory('season')));
+// Handle the native dropdown directly, without the global busy gate. The menu's
+// '+ Add New Season / Year...' option must open the prompt on selection.
+let addingBuilderSeason=false;
+function onBuilderSeasonSelection(){
+ if($('builderSeason').value!=='__add__'){syncBuilderProjectSeason();return;}
+ if(addingBuilderSeason)return;
+ addingBuilderSeason=true;
+ // Restore the select before showing the prompt, so cancel never leaves a sentinel.
+ const team=$('builderTeam').value;
+ $('builderSeason').value='';
+ Promise.resolve().then(()=>builderAddCategory('season')).catch(e=>{
+   console.error(e);message(e.message||String(e));
+   $('builderTeam').value=team;builderChoices();
+ }).finally(()=>{addingBuilderSeason=false});
+}
+$('builderSeason').addEventListener('change',onBuilderSeasonSelection);
+$('builderSeason').addEventListener('input',onBuilderSeasonSelection);
 
 // V100: spreadsheet production list importer. Width is a mandatory exact match.
 let bulkRows=[],bulkCandidates=[];
