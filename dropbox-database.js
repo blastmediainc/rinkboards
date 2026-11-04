@@ -13,20 +13,22 @@ const inScope=(e,team,season)=>inTeam(e,team)&&(!season||e.season===season);
 const PWHL_TEAMS = ['Boston Fleet','Minnesota Frost','Montréal Victoire','New York Sirens','Ottawa Charge','Toronto Sceptres','Vancouver Goldeneyes','Seattle Torrent','PWHL Detroit','PWHL Hamilton','PWHL Las Vegas','PWHL San Jose'];
 const PWHL_ROOT_KEY='rinkboard-pwhl-root-v116';
 const NCAA_ROOT_KEY='rinkboard-ncaa-root-v137';
+const NLL_ROOT_KEY='rinkboard-nll-root-v140';
+const NLL_TEAMS=['Vancouver Warriors'];
 const NCAA_TEAM='University of Wisconsin Badgers';
 const ncaaDivision=()=>localStorage.getItem('rinkboard-ncaa-division-v137')==='Women'?'Women':'Men';
 const NHL_ROOT_KEY='rinkboard-nhl-root-v134', AHL_ROOT_KEY='rinkboard-ahl-root-v134';
 const BCHL_TEAMS = ["Alberni Valley Bulldogs", "Cowichan Valley Capitals", "Nanaimo Clippers", "Powell River Kings", "Victoria Grizzlies", "Chilliwack Chiefs", "Coquitlam Express", "Langley Rivermen", "Prince George Spruce Kings", "Surrey Eagles", "Cranbrook Bucks", "Salmon Arm Silverbacks", "Trail Smoke Eaters", "Vernon Vipers", "West Kelowna Warriors", "Blackfalds Bulldogs", "Brooks Bandits", "Okotoks Oilers", "Sherwood Park Crusaders", "Spruce Grove Saints"];
 const bchlRootKey='rinkboard-bchl-root-v88';
 const brandKey='rinkboard-active-brand-v85';
-let activeBrand=['bchl','pwhl','nhl','ahl','ncaa'].includes(localStorage.getItem(brandKey))?localStorage.getItem(brandKey):'blast';
+let activeBrand=['bchl','pwhl','nhl','ahl','ncaa','nll'].includes(localStorage.getItem(brandKey))?localStorage.getItem(brandKey):'blast';
 let blastFolder=config.folder||'/Rinkboard Database';
-function brandRoot(){return activeBrand==='bchl'?(localStorage.getItem(bchlRootKey)||'/BCHL Rinkboards'):activeBrand==='pwhl'?(localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards'):activeBrand==='nhl'?(localStorage.getItem(NHL_ROOT_KEY)||'/NHL Rinkboards'):activeBrand==='ahl'?(localStorage.getItem(AHL_ROOT_KEY)||'/AHL Rinkboards'):activeBrand==='ncaa'?(localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards')+'/'+ncaaDivision():blastFolder}
-function presetTeams(){return activeBrand==='bchl'?BCHL_TEAMS:activeBrand==='pwhl'?PWHL_TEAMS:activeBrand==='ahl'?['Abbotsford Canucks']:activeBrand==='ncaa'?[NCAA_TEAM]:[]}
+function brandRoot(){return activeBrand==='bchl'?(localStorage.getItem(bchlRootKey)||'/BCHL Rinkboards'):activeBrand==='pwhl'?(localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards'):activeBrand==='nhl'?(localStorage.getItem(NHL_ROOT_KEY)||'/NHL Rinkboards'):activeBrand==='ahl'?(localStorage.getItem(AHL_ROOT_KEY)||'/AHL Rinkboards'):activeBrand==='ncaa'?(localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards')+'/'+ncaaDivision():activeBrand==='nll'?(localStorage.getItem(NLL_ROOT_KEY)||'/NLL Rinkboards'):blastFolder}
+function presetTeams(){return activeBrand==='bchl'?BCHL_TEAMS:activeBrand==='pwhl'?PWHL_TEAMS:activeBrand==='ahl'?['Abbotsford Canucks']:activeBrand==='ncaa'?[NCAA_TEAM]:activeBrand==='nll'?NLL_TEAMS:[]}
 config.folder=brandRoot();
 function updateLeagueControl(){const label=$('dbLeagueWideLabel');if(label)label.style.display=(activeBrand==='bchl'||activeBrand==='pwhl')?'flex':'none'}
 async function switchDatabaseBrand(next){
- next=['bchl','pwhl','nhl','ahl','ncaa'].includes(next)?next:'blast';
+ next=['bchl','pwhl','nhl','ahl','ncaa','nll'].includes(next)?next:'blast';
  if(next===activeBrand)return;
  activeBrand=next;config.folder=brandRoot();if($('dbLeagueWide'))$('dbLeagueWide').checked=false;updateLeagueControl();$('dbFolder').value=config.folder;
  entries=[];selectedRecord=null;selectedPaths.clear();exportQuantities.clear();visibleRecords=[];
@@ -34,7 +36,7 @@ async function switchDatabaseBrand(next){
  $('dbTeam').value='';$('dbSeason').value='';$('dbSize').value='all';
  $('builderTeam').value='';$('builderSeason').value='';
  builderChoices();render();groupRender();
- message(activeBrand==='bchl'?'BCHL: select a team and season, or add a new one.':activeBrand==='pwhl'?'PWHL: select a team and season, or add a new one.':activeBrand==='nhl'?'NHL database selected.':activeBrand==='ahl'?'AHL database selected.':activeBrand==='ncaa'?'NCAA '+ncaaDivision()+'\'s database selected.':'Legacy Blast Media database selected.');
+ message(activeBrand==='bchl'?'BCHL: select a team and season, or add a new one.':activeBrand==='pwhl'?'PWHL: select a team and season, or add a new one.':activeBrand==='nhl'?'NHL database selected.':activeBrand==='ahl'?'AHL database selected.':activeBrand==='ncaa'?'NCAA '+ncaaDivision()+'\'s database selected.':activeBrand==='nll'?'NLL database selected.':'Legacy Blast Media database selected.');
  if(!expired())await refresh();
 }
 
@@ -365,6 +367,7 @@ const shareLeagueDefs=[
  {key:'ahl',label:'AHL',root:()=>localStorage.getItem(AHL_ROOT_KEY)||'/AHL Rinkboards',preset:['Abbotsford Canucks']},
  {key:'bchl',label:'BCHL',root:()=>localStorage.getItem(bchlRootKey)||'/BCHL Rinkboards',preset:BCHL_TEAMS},
  {key:'pwhl',label:'PWHL',root:()=>localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards',preset:PWHL_TEAMS},
+ {key:'nll',label:'NLL',root:()=>localStorage.getItem(NLL_ROOT_KEY)||'/NLL Rinkboards',preset:NLL_TEAMS},
  {key:'ncaa-men',label:'NCAA — Men',root:()=> (localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards')+'/Men',preset:[NCAA_TEAM]},
  {key:'ncaa-women',label:'NCAA — Women',root:()=> (localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards')+'/Women',preset:[NCAA_TEAM]}
 ];
