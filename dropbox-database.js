@@ -527,24 +527,11 @@ function courierLayout(count){
   return {cols,width:95,height:Math.min(43,(177-(rows-1)*gapY)/rows),gapX:6,gapY};
 }
 function courierFitImage(doc,data,x,y,w,h){
+  // Fit the entire saved rinkboard preview inside the label slot without cropping.
   const props=doc.getImageProperties(data);
-  // Every rinkboard fills the same vertical space. Crop horizontally/vertically
-  // to the common slot ratio rather than shrinking narrow artwork's height.
-  const canvas=document.createElement('canvas');
-  const scale=3;canvas.width=Math.max(1,Math.round(w*scale));canvas.height=Math.max(1,Math.round(h*scale));
-  const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
-  const image=new Image();image.src=data;
-  // PNG data URLs decode synchronously in modern browsers after prior preview load.
-  if(!image.complete||!image.naturalWidth){
-    const ratio=Math.max(w/props.width,h/props.height);
-    const dw=props.width*ratio,dh=props.height*ratio;
-    doc.saveGraphicsState();doc.rect(x,y,w,h);doc.clip();doc.discardPath();
-    doc.addImage(data,'PNG',x+(w-dw)/2,y+(h-dh)/2,dw,dh,undefined,'FAST');doc.restoreGraphicsState();return;
-  }
-  const ratio=Math.max(canvas.width/image.naturalWidth,canvas.height/image.naturalHeight);
-  const dw=image.naturalWidth*ratio,dh=image.naturalHeight*ratio;
-  ctx.drawImage(image,(canvas.width-dw)/2,(canvas.height-dh)/2,dw,dh);
-  doc.addImage(canvas.toDataURL('image/png'),'PNG',x,y,w,h,undefined,'FAST');
+  const scale=Math.min(w/props.width,h/props.height);
+  const drawW=props.width*scale,drawH=props.height*scale;
+  doc.addImage(data,'PNG',x+(w-drawW)/2,y+(h-drawH)/2,drawW,drawH,undefined,'NONE');
 }
 
 const courierReturnAddresses={
@@ -563,25 +550,31 @@ async function courierSetPdfFont(doc){
   }catch(err){throw new Error('Neo Sans Bold font could not be loaded. Keep NeoSansBoldTR.ttf beside index.html and reload. '+(err.message||err))}
 }
 function courierUpdate(){courierEl('courierShip').textContent=courierText();courierEl('courierContents').textContent='CONTENTS: ( '+courierTotal()+' ) RINKBOARDS'}
-function courierSvgToPng(svg){return new Promise((resolve,reject)=>{const blob=new Blob([svg],{type:'image/svg+xml;charset=utf-8'}),url=URL.createObjectURL(blob),img=new Image();img.onload=()=>{try{const canvas=document.createElement('canvas');canvas.width=600;canvas.height=180;const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,600,180);const ratio=Math.min(600/img.width,180/img.height);ctx.drawImage(img,(600-img.width*ratio)/2,(180-img.height*ratio)/2,img.width*ratio,img.height*ratio);// Crop the white board margins so sponsor artwork remains legible in dense labels.
- const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
- let left=canvas.width,top=canvas.height,right=-1,bottom=-1;
- for(let y=0;y<canvas.height;y++)for(let x=0;x<canvas.width;x++){
-   const k=(y*canvas.width+x)*4;
-   const a=pixels.data[k+3],r=pixels.data[k],g=pixels.data[k+1],b=pixels.data[k+2];
-   if(a>32&&Math.min(r,g,b)<225){
-     if(x<left)left=x;if(x>right)right=x;if(y<top)top=y;if(y>bottom)bottom=y;
-   }
- }
- if(right>=left&&bottom>=top){
-   const pad=8;
-   left=Math.max(0,left-pad);top=Math.max(0,top-pad);
-   right=Math.min(canvas.width-1,right+pad);bottom=Math.min(canvas.height-1,bottom+pad);
-   const cropped=document.createElement('canvas');
-   cropped.width=right-left+1;cropped.height=bottom-top+1;
-   cropped.getContext('2d').drawImage(canvas,left,top,cropped.width,cropped.height,0,0,cropped.width,cropped.height);
-   resolve(cropped.toDataURL('image/png'));
- }else resolve(canvas.toDataURL('image/png'))}catch(e){reject(e)}finally{URL.revokeObjectURL(url)}};img.onerror=()=>{URL.revokeObjectURL(url);reject(Error('Preview SVG could not be rendered'))};img.src=url})}
+function courierSvgToPng(svg){
+  // Render the complete Dropbox preview SVG, preserving its original viewBox,
+  // including whitespace and background. Do not trim pixels or crop to content.
+  return new Promise((resolve,reject)=>{
+    const blob=new Blob([svg],{type:'image/svg+xml;charset=utf-8'});
+    const url=URL.createObjectURL(blob);
+    const img=new Image();
+    img.onload=()=>{
+      try{
+        const iw=img.naturalWidth||1470,ih=img.naturalHeight||300;
+        const ratio=Math.min(1,2400/Math.max(iw,ih));
+        const canvas=document.createElement('canvas');
+        canvas.width=Math.max(1,Math.round(iw*ratio));
+        canvas.height=Math.max(1,Math.round(ih*ratio));
+        const ctx=canvas.getContext('2d');
+        ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.drawImage(img,0,0,canvas.width,canvas.height);
+        resolve(canvas.toDataURL('image/png'));
+      }catch(e){reject(e)}finally{URL.revokeObjectURL(url)}
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);reject(Error('Preview SVG could not be rendered'))};
+    img.src=url;
+  });
+}
+
 async function courierOpen(){courierReturnUpdate();courierSelected=courierItems();if(!courierSelected.length){message('Select rinkboards using the database checkboxes before creating a courier label.');return}if(courierSelected.some(e=>!Number.isSafeInteger(e.qty)||e.qty<1||e.qty>500)){message('Check the selected quantities (1–500).');return}courierEl('courierOverlay').hidden=false;courierEl('courierItems').replaceChildren();courierEl('courierArtwork').replaceChildren();courierEl('courierArtwork').dataset.count=String(courierSelected.length);const header=document.querySelector('.brand-logo')||document.querySelector('.brand img');if(header)courierEl('courierBlastLogo').src=header.dataset.originalSrc||header.src;courierSelected.forEach(e=>{const tr=document.createElement('tr');for(const val of [e.name,e.size,String(e.qty)]){const td=document.createElement('td');td.textContent=val;tr.append(td)}courierEl('courierItems').append(tr);const tile=document.createElement('div');tile.className='courierArt';const fallback=document.createElement('span');fallback.textContent=e.name;tile.append(fallback);courierEl('courierArtwork').append(tile)});courierEl('courierSummary').textContent=courierSelected.length+' selected designs · '+courierTotal()+' total rinkboards';courierUpdate();courierEl('courierStatus').textContent='Loading artwork previews from Dropbox…';let failed=0;for(let i=0;i<courierSelected.length;i++){const e=courierSelected[i],tile=courierEl('courierArtwork').children[i];try{const svg=await download(e.path.replace(/\.rinkboard\.json$/i,'.preview.svg'));const png=await courierSvgToPng(svg);e.courierImage=png;tile.replaceChildren();const img=new Image();img.src=png;img.alt=e.name;img.title=e.name+' × '+e.qty;tile.append(img)}catch(err){failed++;console.warn('Courier artwork preview failed:',e.name,err)}}courierEl('courierStatus').textContent=failed?failed+' artwork previews unavailable; names will be printed instead.':'Ready to download.'}
 async function courierExport(){if(!courierSelected.length)return;const btn=courierEl('courierExport');btn.disabled=true;try{if(!window.jspdf?.jsPDF)throw Error('PDF library is not loaded. Reload while connected to the internet.');const doc=new window.jspdf.jsPDF({orientation:'landscape',unit:'pt',format:[792,396],compress:true});const neoFontReady=await courierSetPdfFont(doc);doc.setDrawColor(35);doc.setLineWidth(1.3);doc.rect(12,12,768,372);const logo=courierEl('courierBlastLogo');if(logo?.complete&&logo.naturalWidth){try{const c=document.createElement('canvas');c.width=logo.naturalWidth;c.height=logo.naturalHeight;const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(logo,0,0);doc.addImage(c.toDataURL('image/png'),'PNG',35,32,200,70,undefined,'FAST')}catch(err){console.warn('Brand logo skipped',err)}}doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setCharSpace(0);const returnLines=courierReturnLines();doc.text(returnLines[0],35,116);doc.text(returnLines[1],35,131);const layout=courierLayout(courierSelected.length),gridY=courierSelected.length===1?183:159;
 for(let i=0;i<courierSelected.length;i++){
