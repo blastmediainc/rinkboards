@@ -187,6 +187,8 @@ async function exportSelected(){
  const contact=$('dbExportContact').value.trim();
  const proofBoards=[];
  let exported=0;
+ const zipNeeded=production&&chosen.length>1;
+ const zip=zipNeeded?(window.JSZip?new window.JSZip():(()=>{throw Error("ZIP library unavailable. Check your internet connection and reload the builder.")})()):null;
  for(const record of chosen){
   message(`Loading ${record.name} from Dropbox (${exported+1}/${chosen.length})…`);
   const data=parseSavedProject(await download(record.path),record);
@@ -201,7 +203,8 @@ async function exportSelected(){
   if(proof)proofBoards.push(board);
   if(production){
    message('Generating production: '+record.name);
-   downloadPdf(await window.RinkboardBridge.exportDatabaseSelection([board],false),stem+'_Production.pdf');
+   const bytes=await window.RinkboardBridge.exportDatabaseSelection([board],false);
+   if(zip)zip.file(stem+'_Production.pdf',bytes);else downloadPdf(bytes,stem+'_Production.pdf');
   }
   exported++;
  }
@@ -211,9 +214,16 @@ async function exportSelected(){
   const proofStem=chosen.length===1
    ?[chosen[0].team,chosen[0].season,chosen[0].name,chosen[0].size].map(sanitize).join('_')
    :[common('team','MultipleTeams'),common('season','MultipleSeasons'),'Selected-'+chosen.length+'-Artboards',common('size','MixedSizes')].map(sanitize).join('_');
-  downloadPdf(await window.RinkboardBridge.exportDatabaseSelection(proofBoards,true),proofStem+'_Proof.pdf');
+  const bytes=await window.RinkboardBridge.exportDatabaseSelection(proofBoards,true);
+  if(zip)zip.file(proofStem+'_Proof.pdf',bytes);else downloadPdf(bytes,proofStem+'_Proof.pdf');
  }
- message(`Export complete: ${production?exported+' separate production PDF(s)':''}${production&&proof?' and ':''}${proof?'one combined proof PDF':''}. If downloads are missing, allow multiple downloads for this website.`);
+ if(zip){
+  message('Compressing '+exported+' production PDFs'+(proof?' and combined proof':'')+' into ZIP…');
+  const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:4}});
+  const label=[chosen.every(r=>r.team===chosen[0].team)?chosen[0].team:'MultipleTeams',chosen.every(r=>r.season===chosen[0].season)?chosen[0].season:'MultipleSeasons','Production-'+exported].map(sanitize).join('_');
+  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=label+'.zip';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+ }
+ message('Export complete: '+(zip?'one ZIP with '+exported+' production PDFs'+(proof?' and the combined proof PDF':''):'PDF download ready')+'.');
 }
 // On-demand 10%-scale database preview; cached during the session.
 const hoverPreviewCache=new Map();
