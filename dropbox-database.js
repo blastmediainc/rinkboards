@@ -7,7 +7,7 @@ let config={appKey:'',folder:'/Rinkboard Database'},token=null,entries=[],select
 try{config={...config,...JSON.parse(localStorage.getItem(cfgKey)||'{}')};token=JSON.parse(sessionStorage.getItem(tokenKey)||'null')}catch{}
 // V88: Brand-specific database roots. Existing Blast Media settings remain untouched.
 const LEAGUE_TEAM='League-Wide';
-const isLeague=e=>activeBrand==='bchl'&&e.team===LEAGUE_TEAM;
+const isLeague=e=>(activeBrand==='bchl'||activeBrand==='pwhl')&&e.team===LEAGUE_TEAM;
 const inTeam=(e,team)=>!team||e.team===team||isLeague(e);
 const inScope=(e,team,season)=>inTeam(e,team)&&(!season||e.season===season);
 const PWHL_TEAMS = ['Boston Fleet','Minnesota Frost','Montréal Victoire','New York Sirens','Ottawa Charge','Toronto Sceptres','Vancouver Goldeneyes','Seattle Torrent','PWHL Detroit','PWHL Hamilton','PWHL Las Vegas','PWHL San Jose'];
@@ -20,11 +20,11 @@ let blastFolder=config.folder||'/Rinkboard Database';
 function brandRoot(){return activeBrand==='bchl'?(localStorage.getItem(bchlRootKey)||'/BCHL Rinkboards'):activeBrand==='pwhl'?(localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards'):blastFolder}
 function presetTeams(){return activeBrand==='bchl'?BCHL_TEAMS:activeBrand==='pwhl'?PWHL_TEAMS:[]}
 config.folder=brandRoot();
-function updateLeagueControl(){const label=$('dbLeagueWideLabel');if(label)label.style.display=activeBrand==='bchl'?'flex':'none'}
+function updateLeagueControl(){const label=$('dbLeagueWideLabel');if(label)label.style.display=(activeBrand==='bchl'||activeBrand==='pwhl')?'flex':'none'}
 async function switchDatabaseBrand(next){
  next=['bchl','pwhl'].includes(next)?next:'blast';
  if(next===activeBrand)return;
- activeBrand=next;config.folder=brandRoot();updateLeagueControl();$('dbFolder').value=config.folder;
+ activeBrand=next;config.folder=brandRoot();if($('dbLeagueWide'))$('dbLeagueWide').checked=false;updateLeagueControl();$('dbFolder').value=config.folder;
  entries=[];selectedRecord=null;selectedPaths.clear();exportQuantities.clear();visibleRecords=[];
  folderChoices={teams:new Set(),seasons:new Set(),sizes:new Set()};
  $('dbTeam').value='';$('dbSeason').value='';$('dbSize').value='all';
@@ -46,7 +46,7 @@ function groupScopeOptions(){
  const teamSel=$('dbGroupTeam'),seasonSel=$('dbGroupSeason');if(!teamSel||!seasonSel)return;
  const mainTeam=$('dbTeam')?.value||'',mainSeason=$('dbSeason')?.value||'';
  const previousTeam=teamSel.value||mainTeam,previousSeason=seasonSel.value||mainSeason;
- const teams=[...new Set([...entries.filter(e=>!isLeague(e)).map(e=>e.team),...[...folderChoices.teams].filter(t=>activeBrand!=='bchl'||t!==LEAGUE_TEAM),...presetTeams(),mainTeam])].filter(Boolean).sort((a,b)=>a.localeCompare(b));
+ const teams=[...new Set([...entries.filter(e=>!isLeague(e)).map(e=>e.team),...[...folderChoices.teams].filter(t=>(activeBrand!=='bchl'&&activeBrand!=='pwhl')||t!==LEAGUE_TEAM),...presetTeams(),mainTeam])].filter(Boolean).sort((a,b)=>a.localeCompare(b));
  teamSel.replaceChildren(new Option('Select team…',''));for(const team of teams)teamSel.add(new Option(team,team));
  teamSel.value=teams.includes(previousTeam)?previousTeam:'';
  const team=teamSel.value;
@@ -151,7 +151,7 @@ async function loadFolderChoices(){folderChoices={teams:new Set(),seasons:new Se
 function builderChoices(){
  const teamEl=$('builderTeam'),seasonEl=$('builderSeason');
  const selectedTeam=teamEl.value,selectedSeason=seasonEl.value;
- const teams=[...new Set([...entries.filter(e=>!isLeague(e)).map(e=>e.team),...[...folderChoices.teams].filter(t=>activeBrand!=='bchl'||t!==LEAGUE_TEAM),...presetTeams()])].sort((a,b)=>a.localeCompare(b));
+ const teams=[...new Set([...entries.filter(e=>!isLeague(e)).map(e=>e.team),...[...folderChoices.teams].filter(t=>(activeBrand!=='bchl'&&activeBrand!=='pwhl')||t!==LEAGUE_TEAM),...presetTeams()])].sort((a,b)=>a.localeCompare(b));
  setOptions('builderTeam',teams,selectedTeam,'','Select team…');
  const team=teamEl.value;
  const seasons=team?[...new Set([...entries.filter(e=>inTeam(e,team)).map(e=>e.season),...[...folderChoices.seasons].filter(x=>x.startsWith(team+'/')).map(x=>x.slice(team.length+1))])].sort((a,b)=>a.localeCompare(b)):[];
@@ -210,7 +210,7 @@ function setAllSizesCollapsed(collapse){
   if(btn){btn.textContent=collapse?'Show':'Hide';btn.setAttribute('aria-expanded',String(!collapse));}
  });
 }
-function render(){const team=$('dbTeam').value,season=$('dbSeason').value,size=$('dbSize').value,search=$('dbSearch').value.toLowerCase();const teams=[...new Set([...entries.filter(x=>!isLeague(x)).map(x=>x.team),...[...folderChoices.teams].filter(t=>activeBrand!=='bchl'||t!==LEAGUE_TEAM),...presetTeams()])].sort((a,b)=>a.localeCompare(b));setOptions('dbTeam',teams,team,'','All teams');const seasons=[...new Set([...entries.filter(x=>inTeam(x,team)).map(x=>x.season),...([...folderChoices.seasons].filter(x=>x.startsWith(team+"/"))).map(x=>x.slice(team.length+1))])].sort((a,b)=>a.localeCompare(b));setOptions('dbSeason',seasons,season,'','All seasons');const actualSeason=$('dbSeason').value;const matching=entries.filter(x=>inScope(x,team,actualSeason));const sizes=[...new Set([...matching.map(x=>x.size),...([...folderChoices.sizes].filter(x=>x.startsWith(team+"/"+actualSeason+"/"))).map(x=>x.split("/").pop())])].sort((a,b)=>parseFloat(a.slice(3))-parseFloat(b.slice(3)));setOptions('dbSize',sizes,size,'all','All sizes');let visible=matching.filter(x=>($('dbSize').value==='all'||x.size===$('dbSize').value)&&x.name.toLowerCase().includes(search));visibleRecords=visible;updateSelectionCount();let grid=$('dbGrid');grid.replaceChildren();
+function render(){const team=$('dbTeam').value,season=$('dbSeason').value,size=$('dbSize').value,search=$('dbSearch').value.toLowerCase();const teams=[...new Set([...entries.filter(x=>!isLeague(x)).map(x=>x.team),...[...folderChoices.teams].filter(t=>(activeBrand!=='bchl'&&activeBrand!=='pwhl')||t!==LEAGUE_TEAM),...presetTeams()])].sort((a,b)=>a.localeCompare(b));setOptions('dbTeam',teams,team,'','All teams');const seasons=[...new Set([...entries.filter(x=>inTeam(x,team)).map(x=>x.season),...([...folderChoices.seasons].filter(x=>x.startsWith(team+"/"))).map(x=>x.slice(team.length+1))])].sort((a,b)=>a.localeCompare(b));setOptions('dbSeason',seasons,season,'','All seasons');const actualSeason=$('dbSeason').value;const matching=entries.filter(x=>inScope(x,team,actualSeason));const sizes=[...new Set([...matching.map(x=>x.size),...([...folderChoices.sizes].filter(x=>x.startsWith(team+"/"+actualSeason+"/"))).map(x=>x.split("/").pop())])].sort((a,b)=>parseFloat(a.slice(3))-parseFloat(b.slice(3)));setOptions('dbSize',sizes,size,'all','All sizes');let visible=matching.filter(x=>($('dbSize').value==='all'||x.size===$('dbSize').value)&&x.name.toLowerCase().includes(search));visibleRecords=visible;updateSelectionCount();let grid=$('dbGrid');grid.replaceChildren();
 let toolbar=$('dbSizeVisibility');
 if(!toolbar){toolbar=document.createElement('div');toolbar.id='dbSizeVisibility';
  const all=document.createElement('button');all.type='button';all.textContent='Show all sizes';all.onclick=()=>setAllSizesCollapsed(false);
@@ -231,25 +231,30 @@ header.append(title,count,toggle);section.append(header)}let alphabet=document.c
 
 function updateSelectionCount(){const n=selectedPaths.size;$('dbSelectionCount').textContent=n+' selected';}
 function downloadPdf(bytes,name){const blob=new Blob([bytes],{type:'application/pdf'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000)}
-async function deleteSelected(){
- if(expired())throw Error('Connect Dropbox before deleting.');
+function confirmDeleteSelected(){
+ // Confirm synchronously in the actual click handler before disabling the button.
+ // Some browsers suppress prompt() when the initiating control is disabled first.
  const chosen=entries.filter(e=>selectedPaths.has(e.path));
- if(!chosen.length)throw Error('Select one or more rinkboards to delete using the checkboxes.');
+ if(!chosen.length){message('Select one or more rinkboards using the checkboxes before deleting.');return}
+ if(expired()){message('Connect Dropbox before deleting selected rinkboards.');return}
  const preview=chosen.slice(0,8).map(e=>`• ${e.team} / ${e.season} / ${e.size} / ${e.name}`).join('\n');
  const extra=chosen.length>8?`\n…and ${chosen.length-8} more.`:'';
- const answer=prompt(`PERMANENTLY DELETE ${chosen.length} selected rinkboard(s) from Dropbox?\n\n${preview}${extra}\n\nTheir saved artwork JSON, preview SVG and production PDF will be deleted. Team logos and team/season folders are not affected.\n\nType DELETE to confirm:`);
- if(answer!=='DELETE'){message('Deletion cancelled.');return}
+ const answer=window.prompt(`PERMANENTLY DELETE ${chosen.length} rinkboard(s) from Dropbox?\n\n${preview}${extra}\n\nThis deletes their saved artwork, preview and production PDF.\n\nType DELETE to confirm:`);
+ if(answer===null){message('Deletion cancelled.');return}
+ if(answer.trim().toUpperCase()!=='DELETE'){message('Deletion cancelled. Type DELETE to confirm.');return}
+ perform(()=>deleteSelected(chosen));
+}
+async function deleteSelected(chosen){
  let removed=0,failed=[];
  for(const record of chosen){
-  // Delete the primary record first. Only remove companion files if that succeeds.
   try{await rpc('/files/delete_v2',{path:record.path});removed++;selectedPaths.delete(record.path);exportQuantities.delete(record.path);if(selectedRecord?.path===record.path)selectedRecord=null}
   catch(err){failed.push(`${record.name}: ${err.message}`);continue}
-  for(const path of [record.path.replace(/\.rinkboard\.json$/i,'.preview.svg'),record.path.replace(/\.rinkboard\.json$/i,'.production-100pct.pdf')]){
+  if(/\.rinkboard\.json$/i.test(record.path))for(const path of [record.path.replace(/\.rinkboard\.json$/i,'.preview.svg'),record.path.replace(/\.rinkboard\.json$/i,'.production-100pct.pdf')]){
    try{await rpc('/files/delete_v2',{path})}catch(err){if(!String(err).includes('not_found'))failed.push(`${record.name} companion file: ${err.message}`)}
   }
  }
- await refresh();
- message(`Deleted ${removed} rinkboard(s) from Dropbox.${failed.length?' Some files could not be deleted: '+failed.slice(0,3).join(' | '):''}`);
+ try{await refresh()}catch(err){failed.push('Refresh: '+err.message)}
+ message(`Deleted ${removed} of ${chosen.length} rinkboard(s) from Dropbox.${failed.length?' Errors: '+failed.slice(0,3).join(' | '):''}`);
 }
 async function exportSelected(){
  const proof=$('dbExportProof').checked,production=$('dbExportProduction').checked;
@@ -321,7 +326,7 @@ async function saveOne(index,ctx){
  const width=String(parseFloat(board.settings.width||147));
  if(!Number.isFinite(Number(width))||Number(width)<=0)throw Error('Invalid board width');
  const leagueCheckbox=$('dbLeagueWide');
- const saveShared=activeBrand==='bchl'&&(!!leagueCheckbox?.checked||!!(selectedRecord&&isLeague(selectedRecord)&&!leagueCheckbox));
+ const saveShared=(activeBrand==='bchl'||activeBrand==='pwhl')&&(!!leagueCheckbox?.checked||!!(selectedRecord&&isLeague(selectedRecord)&&!leagueCheckbox));
  const saveTeam=saveShared?LEAGUE_TEAM:ctx.team;
  const folder=parent(saveTeam,ctx.season,width),path=folder+'/'+pathPart(name)+'.rinkboard.json';
  await ensureFolders(folder);
@@ -424,7 +429,7 @@ function bulkScope(){const team=$('dbBulkTeam').value,season=$('dbBulkSeason').v
 function bulkResetMatches(){bulkRows=[];bulkEl('dbBulkRows').replaceChildren();bulkEl('dbBulkApply').disabled=true;bulkEl('dbBulkExport').disabled=true}
 function bulkFillSelect(el,values,current,placeholder){el.replaceChildren(new Option(placeholder,''));for(const v of values)el.add(new Option(v,v));el.value=values.includes(current)?current:''}
 function bulkUpdateSeasons(current){const team=bulkEl('dbBulkTeam').value;const seasons=[...new Set([...entries.filter(e=>inTeam(e,team)).map(e=>e.season),...[...folderChoices.seasons].filter(s=>s.startsWith(team+'/')).map(s=>s.slice(team.length+1))])].sort((a,b)=>a.localeCompare(b));bulkFillSelect(bulkEl('dbBulkSeason'),seasons,current,'Select season…')}
-function bulkOpenScope(){const teams=[...new Set([...entries.filter(e=>!isLeague(e)).map(e=>e.team),...[...folderChoices.teams].filter(t=>activeBrand!=='bchl'||t!==LEAGUE_TEAM),...presetTeams()])].sort((a,b)=>a.localeCompare(b));const currentTeam=bulkEl('dbBulkTeam').value||$('dbTeam').value;const currentSeason=bulkEl('dbBulkSeason').value||$('dbSeason').value;bulkFillSelect(bulkEl('dbBulkTeam'),teams,currentTeam,'Select team…');bulkUpdateSeasons(currentSeason)}
+function bulkOpenScope(){const teams=[...new Set([...entries.filter(e=>!isLeague(e)).map(e=>e.team),...[...folderChoices.teams].filter(t=>(activeBrand!=='bchl'&&activeBrand!=='pwhl')||t!==LEAGUE_TEAM),...presetTeams()])].sort((a,b)=>a.localeCompare(b));const currentTeam=bulkEl('dbBulkTeam').value||$('dbTeam').value;const currentSeason=bulkEl('dbBulkSeason').value||$('dbSeason').value;bulkFillSelect(bulkEl('dbBulkTeam'),teams,currentTeam,'Select team…');bulkUpdateSeasons(currentSeason)}
 function bulkSyncDatabase(){const {team,season}=bulkScope();$('dbTeam').value=team;$('dbSeason').value='';render();$('dbSeason').value=season;render();if($('dbGroupTeam')){$('dbGroupTeam').value=team;groupScopeOptions();$('dbGroupSeason').value=season;}groupRender();if($('dbTeam').value!==team||$('dbSeason').value!==season)throw Error('Could not apply the selected team and season to the Database. Refresh the database and try again.')}
 
 function bulkCandidatesFor(row,scope){const w=bulkWidth(row.width);if(!Number.isFinite(w))return [];return entries.filter(e=>inScope(e,scope.team,scope.season)&&Number(e.width)===w)}
@@ -471,7 +476,7 @@ $('dbBulkExport').onclick=()=>{bulkEl('dbBulkOverlay').hidden=true;$('dbExportPr
 updateLeagueControl();$('databaseOpen').onclick=()=>{$('dbOverlay').hidden=false;if(!expired()&&!entries.length)perform(refresh)};$('dbClose').onclick=()=>{$('dbOverlay').hidden=true};$('dbOverlay').addEventListener('click',e=>{if(e.target===$('dbOverlay'))$('dbOverlay').hidden=true});$('dbAppKey').value=config.appKey;$('dbFolder').value=config.folder;$('dbApply').onclick=applyConfig;$('dbConnect').onclick=()=>perform(login);$('dbRefresh').onclick=()=>perform(refresh);$('dbRebuildPreviews').onclick=()=>perform(rebuildSelectedPreviews);$('dbSave').onclick=()=>perform(saveCurrent);$('dbSaveAll').onclick=()=>perform(saveAll);$('dbGroupSave').onclick=groupSave;$('dbGroupLoad').onclick=groupLoad;$('dbGroupDelete').onclick=groupDelete;groupRender();
  $('dbGroupTeam')?.addEventListener('change',()=>{$('dbGroupSeason').value='';groupScopeOptions();groupRender()});
  $('dbGroupSeason')?.addEventListener('change',groupRender);
- $('dbSelectVisible').onclick=()=>{visibleRecords.forEach(r=>selectedPaths.add(r.path));render()};$('dbClearSelection').onclick=()=>{selectedPaths.clear();render()};$('dbExportSelected').onclick=()=>perform(exportSelected);$('dbDeleteSelected').onclick=()=>perform(deleteSelected);for(let id of ['dbTeam','dbSeason','dbSize'])$(id).addEventListener('change',()=>{if($(id).value==='__add__'){perform(()=>addCategory(id));return}if(id==='dbTeam'){$('dbSeason').value='';$('dbSize').value='all'}if(id==='dbSeason')$('dbSize').value='all';render();if(id==='dbTeam'||id==='dbSeason')groupRender()});$('dbSearch').addEventListener('input',render);if(!expired()){state('Connected');refresh().catch(e=>{console.error(e);message(e.message)})}completeOAuth().catch(e=>{console.error(e);message(e.message)});
+ $('dbSelectVisible').onclick=()=>{visibleRecords.forEach(r=>selectedPaths.add(r.path));render()};$('dbClearSelection').onclick=()=>{selectedPaths.clear();render()};$('dbExportSelected').onclick=()=>perform(exportSelected);$('dbDeleteSelected').onclick=confirmDeleteSelected;for(let id of ['dbTeam','dbSeason','dbSize'])$(id).addEventListener('change',()=>{if($(id).value==='__add__'){perform(()=>addCategory(id));return}if(id==='dbTeam'){$('dbSeason').value='';$('dbSize').value='all'}if(id==='dbSeason')$('dbSize').value='all';render();if(id==='dbTeam'||id==='dbSeason')groupRender()});$('dbSearch').addEventListener('input',render);if(!expired()){state('Connected');refresh().catch(e=>{console.error(e);message(e.message)})}completeOAuth().catch(e=>{console.error(e);message(e.message)});
 
 // V96 Courier Label: use the exact database selection and its export quantities.
 const courierEl=id=>document.getElementById(id);
