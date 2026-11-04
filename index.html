@@ -908,7 +908,7 @@ ATTN:
  const footer=create('div','dbxFooter',bar);
  create('span','dbxFooterLabel',footer).textContent='Actions';
  const actions=create('div','dbxFooterButtons',footer);
- ['dbShareSelected','dbDeleteSelected','dbCourierOpen','dbBandGenerate','dbExportSelected'].forEach(id=>move(id,actions));
+ ['dbShareSelected','dbShareTeams','dbDeleteSelected','dbCourierOpen','dbBandGenerate','dbExportSelected'].forEach(id=>move(id,actions));
  const advanced=bar.querySelector('.dbAdvanced');if(advanced)bar.appendChild(advanced);
 })();
 </script>
