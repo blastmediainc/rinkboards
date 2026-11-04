@@ -146,7 +146,7 @@ async function login(){if(!config.appKey)throw Error('Enter your Dropbox App Key
 async function completeOAuth(){let q=new URLSearchParams(location.search);if(!q.has('code')&&!q.has('error'))return;let clear=()=>history.replaceState({},'',location.pathname+location.hash);if(q.has('error')){message('Dropbox authorization: '+q.get('error_description'));clear();return}let saved=JSON.parse(sessionStorage.getItem(pkceKey)||'null');sessionStorage.removeItem(pkceKey);if(!saved||saved.state!==q.get('state')){message('Dropbox sign-in verification failed. Try Connect again.');clear();return}let form=new URLSearchParams({code:q.get('code'),grant_type:'authorization_code',client_id:config.appKey,code_verifier:saved.verifier,redirect_uri:saved.returnUrl});let res=await fetch('https://api.dropboxapi.com/oauth2/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:form});let data=await res.json();clear();if(!res.ok)throw Error('Dropbox authorization failed: '+JSON.stringify(data));token={access:data.access_token,expires:Date.now()+(data.expires_in||14400)*1000};sessionStorage.setItem(tokenKey,JSON.stringify(token));state('Connected');message('Connected to Dropbox. Choose your team and season, then Refresh.');$('dbOverlay').hidden=false;await refresh()}
 async function listAll(){let result=[];let first=await rpc('/files/list_folder',{path:base(),recursive:true,include_deleted:false,limit:2000});result.push(...first.entries);while(first.has_more){first=await rpc('/files/list_folder/continue',{cursor:first.cursor});result.push(...first.entries)}return result.filter(x=>x['.tag']==='file'&&x.name.endsWith('.rinkboard.json'))}
 function parseEntry(meta){let path=meta.path_display||meta.path_lower||'',prefix=base()+'/';if(!path.toLowerCase().startsWith(prefix.toLowerCase()))return null;let parts=path.slice(prefix.length).split('/');if(parts.length!==4)return null;let [team,season,size,name]=parts;let width=size.match(/^30x(.+)$/i)?.[1];if(!width)return null;return {team,season,size,width,name:name.replace(/\.rinkboard\.json$/i,''),path,rev:meta.rev,id:meta.id}}
-async function addCategory(id){const previous=id==='dbTeam'?'':id==='dbSeason'?'': 'all';const team=$('dbTeam').value,season=$('dbSeason').value;const type=id==='dbTeam'||id==='builderTeam'?'team':id==='dbSeason'||id==='builderSeason'?'season':'size';if(type==='season'&&!team||type==='size'&&(!team||!season)){message('Select a team'+(type==='size'?' and season':'')+' first.');$(id).value=previous;return}const raw=prompt(type==='size'?'Enter board width in inches (height is 30 inches):':'Enter new '+type+' name:');if(raw===null){render();return}let name=raw.trim();if(type==='size'){const width=Number(name.replace(/[^0-9.]/g,''));if(!Number.isFinite(width)||width<=0){message('Enter a valid board width.');render();return}name='30x'+String(width)}else if(!name||name==='.'||name==='..'||/[\\/:*?"<>|]/.test(name)){message('Enter a valid '+type+' name without slashes or special filename characters.');render();return}if(expired()){message('Connect Dropbox before adding a '+type+'.');render();return}const folder=type==='team'?base()+'/'+name:type==='season'?base()+'/'+team+'/'+name:base()+'/'+team+'/'+season+'/'+name;await ensureFolders(folder);if(type==='team')folderChoices.teams.add(name);else if(type==='season')folderChoices.seasons.add(team+'/'+name);else folderChoices.sizes.add(team+'/'+season+'/'+name);if(type==='team'){$('dbTeam').innerHTML='';const o=document.createElement('option');o.value=name;$('dbTeam').append(o);$('dbTeam').value=name}else if(type==='season'){$('dbSeason').innerHTML='';const o=document.createElement('option');o.value=name;$('dbSeason').append(o);$('dbSeason').value=name}else{$('dbSize').innerHTML='';const o=document.createElement('option');o.value=name;$('dbSize').append(o);$('dbSize').value=name}render();message('Created '+type+' '+name+' in Dropbox. You can now save artboards here.')}
+async function addCategory(id){const previous=id==='dbTeam'?'':id==='dbSeason'?'': 'all';const team=$('dbTeam').value,season=$('dbSeason').value;const type=id==='dbTeam'||id==='builderTeam'?'team':id==='dbSeason'||id==='builderSeason'?'season':'size';if(type==='season'&&(!team||team==='__add__')||type==='size'&&(!team||!season)){message('Select a team'+(type==='size'?' and season':'')+' first.');$(id).value=previous;return}const raw=prompt(type==='size'?'Enter board width in inches (height is 30 inches):':'Enter new '+type+' name:');if(raw===null){render();return}let name=raw.trim();if(type==='size'){const width=Number(name.replace(/[^0-9.]/g,''));if(!Number.isFinite(width)||width<=0){message('Enter a valid board width.');render();return}name='30x'+String(width)}else if(!name||name==='.'||name==='..'||/[\\/:*?"<>|]/.test(name)){message('Enter a valid '+type+' name without slashes or special filename characters.');render();return}if(expired()){message('Connect Dropbox before adding a '+type+'.');render();return}const folder=type==='team'?base()+'/'+name:type==='season'?base()+'/'+team+'/'+name:base()+'/'+team+'/'+season+'/'+name;await ensureFolders(folder);if(type==='team')folderChoices.teams.add(name);else if(type==='season')folderChoices.seasons.add(team+'/'+name);else folderChoices.sizes.add(team+'/'+season+'/'+name);if(type==='team'){$('dbTeam').innerHTML='';const o=document.createElement('option');o.value=name;$('dbTeam').append(o);$('dbTeam').value=name}else if(type==='season'){$('dbSeason').innerHTML='';const o=document.createElement('option');o.value=name;$('dbSeason').append(o);$('dbSeason').value=name}else{$('dbSize').innerHTML='';const o=document.createElement('option');o.value=name;$('dbSize').append(o);$('dbSize').value=name}render();message('Created '+type+' '+name+' in Dropbox. You can now save artboards here.')}
 async function loadFolderChoices(){folderChoices={teams:new Set(),seasons:new Set(),sizes:new Set()};let result;try{result=await rpc('/files/list_folder',{path:base(),recursive:true,limit:2000})}catch(e){if(String(e).includes('not_found'))return;throw e}let items=[...result.entries];while(result.has_more){result=await rpc('/files/list_folder/continue',{cursor:result.cursor});items.push(...result.entries)}for(const item of items){if(item['.tag']!=='folder')continue;const path=item.path_display||item.path_lower||'';if(!path.toLowerCase().startsWith((base()+'/').toLowerCase()))continue;const parts=path.slice(base().length+1).split('/');if(parts.length===1)folderChoices.teams.add(parts[0]);if(parts.length===2)folderChoices.seasons.add(parts.join('/'));if(parts.length===3&&/^30x/i.test(parts[2]))folderChoices.sizes.add(parts.join('/'))}}
 function builderChoices(){
  const teamEl=$('builderTeam'),seasonEl=$('builderSeason');
@@ -165,21 +165,25 @@ function syncBuilderProjectSeason(){
  if(project.value!==next){project.value=next;project.dispatchEvent(new Event('input',{bubbles:true}));project.dispatchEvent(new Event('change',{bubbles:true}));}
 }
 async function builderAddCategory(type){
- const team=$('builderTeam').value,season=$('builderSeason').value;
- if(type==='season'&&!team)throw Error('Choose a team before adding a season.');
- const raw=prompt('Enter new '+(type==='team'?'team':'season')+' name:');
- if(raw===null){builderChoices();return}
+ const teamEl=$('builderTeam'),seasonEl=$('builderSeason');
+ const team=teamEl.value==='__add__'?'':teamEl.value;
+ if(type==='season'&&!team){builderChoices();throw Error('Select a PWHL team before adding a season.');}
+ const raw=prompt('Enter new '+(type==='team'?'team':'season / year')+' name (example: 2026-27):');
+ if(raw===null){builderChoices();return;}
  const name=raw.trim();
- if(!name||name==='.'||name==='..'||/[\/:*?"<>|]/.test(name))throw Error('Enter a valid name without slashes or special filename characters.');
- if(expired())throw Error('Connect Dropbox in the Database panel before adding a team or season.');
+ if(!name||name==='.'||name==='..'||/[\\/:*?"<>|]/.test(name)){builderChoices();throw Error('Enter a valid name without slashes or special filename characters.');}
+ if(expired()){builderChoices();throw Error('Connect Dropbox in the Database panel before adding a team or season.');}
  const folder=type==='team'?base()+'/'+name:base()+'/'+team+'/'+name;
  await ensureFolders(folder);
  if(type==='team')folderChoices.teams.add(name);else folderChoices.seasons.add(team+'/'+name);
+ // Restore the actual selected team before rebuilding options. Never retain the + Add sentinel.
+ teamEl.value=type==='team'?'':team;
+ seasonEl.value='';
  builderChoices();
- if(type==='team'){$('builderTeam').value=name;builderChoices()}
- else $('builderSeason').value=name;
- syncBuilderProjectSeason();
- render();message('Created '+type+' '+name+' in Dropbox.');
+ if(type==='team'){teamEl.value=name;builderChoices();}
+ else{teamEl.value=team;seasonEl.value=name;}
+ syncBuilderProjectSeason();render();groupRender();
+ message('Created '+type+' '+name+' in '+activeBrand.toUpperCase()+' Dropbox database.');
 }
 async function builderSave(){
  if(expired())throw Error('Connect Dropbox from the Database panel before saving.');
@@ -390,6 +394,7 @@ window.addEventListener('rinkboard-brand-changed',event=>perform(()=>switchDatab
 $('builderDbSave').onclick=()=>perform(builderSave);
 $('builderTeam').addEventListener('change',()=>{if($('builderTeam').value==='__add__'){perform(()=>builderAddCategory('team'));return}$('builderSeason').value='';builderChoices();syncBuilderProjectSeason()});
 $('builderSeason').addEventListener('change',()=>{if($('builderSeason').value==='__add__'){perform(()=>builderAddCategory('season'));return}syncBuilderProjectSeason()});
+const addSeasonBtn=$('builderAddSeasonBtn');if(addSeasonBtn)addSeasonBtn.addEventListener('click',()=>perform(()=>builderAddCategory('season')));
 
 // V100: spreadsheet production list importer. Width is a mandatory exact match.
 let bulkRows=[],bulkCandidates=[];
@@ -467,9 +472,23 @@ function courierLayout(count){
 }
 function courierFitImage(doc,data,x,y,w,h){
   const props=doc.getImageProperties(data);
-  const ratio=Math.min(w/props.width,h/props.height);
-  const dw=props.width*ratio,dh=props.height*ratio;
-  doc.addImage(data,'PNG',x+(w-dw)/2,y+(h-dh)/2,dw,dh,undefined,'FAST');
+  // Every rinkboard fills the same vertical space. Crop horizontally/vertically
+  // to the common slot ratio rather than shrinking narrow artwork's height.
+  const canvas=document.createElement('canvas');
+  const scale=3;canvas.width=Math.max(1,Math.round(w*scale));canvas.height=Math.max(1,Math.round(h*scale));
+  const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+  const image=new Image();image.src=data;
+  // PNG data URLs decode synchronously in modern browsers after prior preview load.
+  if(!image.complete||!image.naturalWidth){
+    const ratio=Math.max(w/props.width,h/props.height);
+    const dw=props.width*ratio,dh=props.height*ratio;
+    doc.saveGraphicsState();doc.rect(x,y,w,h);doc.clip();doc.discardPath();
+    doc.addImage(data,'PNG',x+(w-dw)/2,y+(h-dh)/2,dw,dh,undefined,'FAST');doc.restoreGraphicsState();return;
+  }
+  const ratio=Math.max(canvas.width/image.naturalWidth,canvas.height/image.naturalHeight);
+  const dw=image.naturalWidth*ratio,dh=image.naturalHeight*ratio;
+  ctx.drawImage(image,(canvas.width-dw)/2,(canvas.height-dh)/2,dw,dh);
+  doc.addImage(canvas.toDataURL('image/png'),'PNG',x,y,w,h,undefined,'FAST');
 }
 
 const courierReturnAddresses={
