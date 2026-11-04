@@ -12,18 +12,21 @@ const inTeam=(e,team)=>!team||e.team===team||isLeague(e);
 const inScope=(e,team,season)=>inTeam(e,team)&&(!season||e.season===season);
 const PWHL_TEAMS = ['Boston Fleet','Minnesota Frost','Montréal Victoire','New York Sirens','Ottawa Charge','Toronto Sceptres','Vancouver Goldeneyes','Seattle Torrent','PWHL Detroit','PWHL Hamilton','PWHL Las Vegas','PWHL San Jose'];
 const PWHL_ROOT_KEY='rinkboard-pwhl-root-v116';
+const NCAA_ROOT_KEY='rinkboard-ncaa-root-v137';
+const NCAA_TEAM='University of Wisconsin Badgers';
+const ncaaDivision=()=>localStorage.getItem('rinkboard-ncaa-division-v137')==='Women'?'Women':'Men';
 const NHL_ROOT_KEY='rinkboard-nhl-root-v134', AHL_ROOT_KEY='rinkboard-ahl-root-v134';
 const BCHL_TEAMS = ["Alberni Valley Bulldogs", "Cowichan Valley Capitals", "Nanaimo Clippers", "Powell River Kings", "Victoria Grizzlies", "Chilliwack Chiefs", "Coquitlam Express", "Langley Rivermen", "Prince George Spruce Kings", "Surrey Eagles", "Cranbrook Bucks", "Salmon Arm Silverbacks", "Trail Smoke Eaters", "Vernon Vipers", "West Kelowna Warriors", "Blackfalds Bulldogs", "Brooks Bandits", "Okotoks Oilers", "Sherwood Park Crusaders", "Spruce Grove Saints"];
 const bchlRootKey='rinkboard-bchl-root-v88';
 const brandKey='rinkboard-active-brand-v85';
-let activeBrand=['bchl','pwhl','nhl','ahl'].includes(localStorage.getItem(brandKey))?localStorage.getItem(brandKey):'blast';
+let activeBrand=['bchl','pwhl','nhl','ahl','ncaa'].includes(localStorage.getItem(brandKey))?localStorage.getItem(brandKey):'blast';
 let blastFolder=config.folder||'/Rinkboard Database';
-function brandRoot(){return activeBrand==='bchl'?(localStorage.getItem(bchlRootKey)||'/BCHL Rinkboards'):activeBrand==='pwhl'?(localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards'):activeBrand==='nhl'?(localStorage.getItem(NHL_ROOT_KEY)||'/NHL Rinkboards'):activeBrand==='ahl'?(localStorage.getItem(AHL_ROOT_KEY)||'/AHL Rinkboards'):blastFolder}
-function presetTeams(){return activeBrand==='bchl'?BCHL_TEAMS:activeBrand==='pwhl'?PWHL_TEAMS:activeBrand==='ahl'?['Abbotsford Canucks']:[]}
+function brandRoot(){return activeBrand==='bchl'?(localStorage.getItem(bchlRootKey)||'/BCHL Rinkboards'):activeBrand==='pwhl'?(localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards'):activeBrand==='nhl'?(localStorage.getItem(NHL_ROOT_KEY)||'/NHL Rinkboards'):activeBrand==='ahl'?(localStorage.getItem(AHL_ROOT_KEY)||'/AHL Rinkboards'):activeBrand==='ncaa'?(localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards')+'/'+ncaaDivision():blastFolder}
+function presetTeams(){return activeBrand==='bchl'?BCHL_TEAMS:activeBrand==='pwhl'?PWHL_TEAMS:activeBrand==='ahl'?['Abbotsford Canucks']:activeBrand==='ncaa'?[NCAA_TEAM]:[]}
 config.folder=brandRoot();
 function updateLeagueControl(){const label=$('dbLeagueWideLabel');if(label)label.style.display=(activeBrand==='bchl'||activeBrand==='pwhl')?'flex':'none'}
 async function switchDatabaseBrand(next){
- next=['bchl','pwhl','nhl','ahl'].includes(next)?next:'blast';
+ next=['bchl','pwhl','nhl','ahl','ncaa'].includes(next)?next:'blast';
  if(next===activeBrand)return;
  activeBrand=next;config.folder=brandRoot();if($('dbLeagueWide'))$('dbLeagueWide').checked=false;updateLeagueControl();$('dbFolder').value=config.folder;
  entries=[];selectedRecord=null;selectedPaths.clear();exportQuantities.clear();visibleRecords=[];
@@ -31,7 +34,7 @@ async function switchDatabaseBrand(next){
  $('dbTeam').value='';$('dbSeason').value='';$('dbSize').value='all';
  $('builderTeam').value='';$('builderSeason').value='';
  builderChoices();render();groupRender();
- message(activeBrand==='bchl'?'BCHL: select a team and season, or add a new one.':activeBrand==='pwhl'?'PWHL: select a team and season, or add a new one.':activeBrand==='nhl'?'NHL database selected.':activeBrand==='ahl'?'AHL database selected.':'Legacy Blast Media database selected.');
+ message(activeBrand==='bchl'?'BCHL: select a team and season, or add a new one.':activeBrand==='pwhl'?'PWHL: select a team and season, or add a new one.':activeBrand==='nhl'?'NHL database selected.':activeBrand==='ahl'?'AHL database selected.':activeBrand==='ncaa'?'NCAA '+ncaaDivision()+'\'s database selected.':'Legacy Blast Media database selected.');
  if(!expired())await refresh();
 }
 
@@ -127,17 +130,18 @@ function parseSavedProject(raw,record){
 async function upload(path,content,rev,overwrite=false){let args={path,mode:rev?{'.tag':'update',update:rev}:overwrite?'overwrite':'add',autorename:false,mute:true,strict_conflict:true};let res=await fetch(CONTENT+'/files/upload',{method:'POST',headers:{Authorization:'Bearer '+ensure(),'Dropbox-API-Arg':JSON.stringify(args),'Content-Type':'application/octet-stream'},body:content});if(!res.ok){let t=await res.text();if(res.status===409)throw Error('Dropbox conflict: this file may have changed or already exist. Refresh the database before saving. '+t.slice(0,120));throw Error('Upload: '+t.slice(0,350))}return await res.json()}
 async function mkdir(path){try{await rpc('/files/create_folder_v2',{path,autorename:false})}catch(e){if(!String(e).includes('conflict'))throw e}}
 async function ensureFolders(path){let parts=path.split('/').filter(Boolean),curr='';for(let part of parts){curr+='/'+part;await mkdir(curr)}}
-function setBusy(b){busy=b;for(let id of ['dbSave','dbSaveAll','dbRefresh','dbConnect','dbExportSelected','dbDeleteSelected','dbShareSelected','builderDbSave','dbRebuildPreviews'])$(id).disabled=b}
+function setBusy(b){busy=b;for(let id of ['dbSave','dbSaveAll','dbRefresh','dbConnect','dbExportSelected','dbDeleteSelected','dbShareSelected','dbShareTeams','builderDbSave','dbRebuildPreviews'])$(id).disabled=b}
 async function perform(fn){if(busy)return;setBusy(true);try{await fn()}catch(e){console.error(e);message(e.message||String(e))}finally{setBusy(false)}}
 function applyConfig(){
  const nextKey=$('dbAppKey').value.trim();
- const nextFolder=$('dbFolder').value.trim().replace(/\/+$/,'')||(activeBrand==='bchl'?'/BCHL Rinkboards':activeBrand==='pwhl'?'/PWHL Rinkboards':activeBrand==='nhl'?'/NHL Rinkboards':activeBrand==='ahl'?'/AHL Rinkboards':'/Rinkboard Database');
+ const nextFolder=$('dbFolder').value.trim().replace(/\/+$/,'')||(activeBrand==='bchl'?'/BCHL Rinkboards':activeBrand==='pwhl'?'/PWHL Rinkboards':activeBrand==='nhl'?'/NHL Rinkboards':activeBrand==='ahl'?'/AHL Rinkboards':activeBrand==='ncaa'?'/NCAA Rinkboards/'+ncaaDivision():'/Rinkboard Database');
  const changed=nextFolder!==config.folder||nextKey!==config.appKey;
  config.appKey=nextKey;config.folder=nextFolder;
  if(activeBrand==='bchl')localStorage.setItem(bchlRootKey,nextFolder);
  if(activeBrand==='pwhl')localStorage.setItem(PWHL_ROOT_KEY,nextFolder);
  if(activeBrand==='nhl')localStorage.setItem(NHL_ROOT_KEY,nextFolder);
  if(activeBrand==='ahl')localStorage.setItem(AHL_ROOT_KEY,nextFolder);
+ if(activeBrand==='ncaa')localStorage.setItem(NCAA_ROOT_KEY,nextFolder.replace(/\/(Men|Women)$/,''));
  if(activeBrand==='blast')blastFolder=nextFolder;
  localStorage.setItem(cfgKey,JSON.stringify({appKey:config.appKey,folder:blastFolder}));
  if(changed){entries=[];selectedRecord=null;selectedPaths.clear();exportQuantities.clear();visibleRecords=[];folderChoices={teams:new Set(),seasons:new Set(),sizes:new Set()};builderChoices();render()}
@@ -355,6 +359,77 @@ async function saveOne(index,ctx){
  // The existing production PDF, if any, is not refreshed by this operation.
  return {name,pdfSaved:false,pdfError:'Production PDF not regenerated; export it separately when ready.'};
 }
+// V138 — Explicit per-team, cross-league sharing. Copies saved editable projects, not PDF exports.
+const shareLeagueDefs=[
+ {key:'nhl',label:'NHL',root:()=>localStorage.getItem(NHL_ROOT_KEY)||'/NHL Rinkboards',preset:[]},
+ {key:'ahl',label:'AHL',root:()=>localStorage.getItem(AHL_ROOT_KEY)||'/AHL Rinkboards',preset:['Abbotsford Canucks']},
+ {key:'bchl',label:'BCHL',root:()=>localStorage.getItem(bchlRootKey)||'/BCHL Rinkboards',preset:BCHL_TEAMS},
+ {key:'pwhl',label:'PWHL',root:()=>localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards',preset:PWHL_TEAMS},
+ {key:'ncaa-men',label:'NCAA — Men',root:()=> (localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards')+'/Men',preset:[NCAA_TEAM]},
+ {key:'ncaa-women',label:'NCAA — Women',root:()=> (localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards')+'/Women',preset:[NCAA_TEAM]}
+];
+let shareRecords=[];
+const shareUI=id=>$(id);
+function shareStatus(msg){shareUI('dbShareTeamsStatus').textContent=msg}
+async function shareDestinationTeams(def){
+ const teams=new Set(def.preset);
+ try{
+  const data=await rpc('/files/list_folder',{path:def.root(),recursive:false,limit:2000});
+  let batch=data;
+  while(true){for(const item of batch.entries||[]){if(item['.tag']==='folder'&&item.name!=='Team Logos'&&item.name!==LEAGUE_TEAM)teams.add(item.name)}if(!batch.has_more)break;batch=await rpc('/files/list_folder/continue',{cursor:batch.cursor})}
+ }catch(e){if(!String(e).includes('not_found'))console.warn('Could not list destination teams',def.label,e)}
+ return [...teams].sort((a,b)=>a.localeCompare(b));
+}
+async function openShareTeams(){
+ if(expired())throw Error('Connect Dropbox before sharing artwork.');
+ shareRecords=entries.filter(e=>selectedPaths.has(e.path));
+ if(!shareRecords.length)throw Error('Select saved rinkboards using the database checkboxes first.');
+ const overlay=shareUI('dbShareTeamsOverlay'),dest=shareUI('dbShareTeamsDest');
+ shareUI('dbShareTeamsCount').textContent=shareRecords.length+' selected rinkboard(s)';
+ shareStatus('Loading available teams…');dest.replaceChildren();overlay.hidden=false;
+ for(const def of shareLeagueDefs){
+  const group=document.createElement('details');group.style.cssText='border:1px solid #ccc;border-radius:8px;padding:10px';
+  const title=document.createElement('summary');title.textContent=def.label;title.style.cssText='cursor:pointer;font-weight:700';group.append(title);
+  const body=document.createElement('div');body.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:7px;padding:10px 0';
+  const teams=await shareDestinationTeams(def);
+  for(const team of teams){const label=document.createElement('label');label.style.cssText='font-size:12px;display:flex;align-items:center;gap:6px';const check=document.createElement('input');check.type='checkbox';check.className='dbShareTarget';check.dataset.league=def.key;check.dataset.team=team;label.append(check,document.createTextNode(team));body.append(label)}
+  const add=document.createElement('button');add.type='button';add.textContent='+ Add destination team';add.style.cssText='font-size:12px;justify-self:start';add.onclick=()=>{const name=prompt('Team name to add under '+def.label+':');if(name===null)return;const team=name.trim();if(!team||team==='Team Logos'||team===LEAGUE_TEAM||/[\\/:*?"<>|]/.test(team)){shareStatus('Enter a valid team name.');return}if([...body.querySelectorAll('.dbShareTarget')].some(c=>c.dataset.team.toLowerCase()===team.toLowerCase())){shareStatus('That team already exists in the list.');return}const label=document.createElement('label');label.style.cssText='font-size:12px;display:flex;align-items:center;gap:6px';const check=document.createElement('input');check.type='checkbox';check.checked=true;check.className='dbShareTarget';check.dataset.league=def.key;check.dataset.team=team;label.append(check,document.createTextNode(team));body.insertBefore(label,add);shareStatus('Added '+team+' as a destination. The Dropbox folder will be created when you copy.')};
+  body.append(add);group.append(body);dest.append(group);
+ }
+ shareStatus('Select one or more teams, then click Copy to Selected Teams.');
+}
+async function copyShareTeams(){
+ const targets=[...document.querySelectorAll('#dbShareTeamsDest .dbShareTarget:checked')].map(c=>({def:shareLeagueDefs.find(d=>d.key===c.dataset.league),team:c.dataset.team}));
+ if(!targets.length){shareStatus('Select at least one destination team.');return}
+ const total=shareRecords.length*targets.length;
+ if(!confirm('Copy '+shareRecords.length+' rinkboard(s) to '+targets.length+' selected team destination(s)?\n\nOriginals remain untouched. Existing destination files will be skipped.'))return;
+ const btn=shareUI('dbShareTeamsConfirm');btn.disabled=true;
+ let copied=0,skipped=0,errors=[];
+ try{
+  for(const record of shareRecords){
+   let source;
+   try{source=parseSavedProject(await download(record.path),record)}catch(e){errors.push(record.name+': '+e.message);continue}
+   let preview=null;
+   try{preview=await download(record.path.replace(/\.rinkboard\.json$/i,'.preview.svg'))}catch(e){console.warn('No preview to share',record.name,e)}
+   for(const target of targets){
+    const folder=target.def.root().replace(/\/+$/,'')+'/'+pathPart(target.team)+'/'+pathPart(record.season)+'/30x'+pathPart(record.width);
+    const destination=folder+'/'+pathPart(record.name)+'.rinkboard.json';
+    if(destination.toLowerCase()===record.path.toLowerCase()){skipped++;continue}
+    try{
+     shareStatus('Copying '+(copied+skipped+errors.length+1)+' / '+total+': '+record.name+' → '+target.def.label+' / '+target.team);
+     await ensureFolders(folder);
+     // Use add mode: never overwrite an existing project in a destination team.
+     const payload={...source,team:target.team,season:record.season,sponsor:record.name,width:record.width,updatedAt:new Date().toISOString()};
+     await upload(destination,JSON.stringify(payload),null,false);
+     copied++;
+     if(preview!==null){try{await upload(destination.replace(/\.rinkboard\.json$/i,'.preview.svg'),preview,null,false)}catch(e){console.warn('Shared project, but preview could not be copied',destination,e);errors.push(record.name+' → '+target.team+': preview unavailable')}}
+    }catch(e){if(/conflict|already exist/i.test(String(e))){skipped++}else{errors.push(record.name+' → '+target.def.label+' / '+target.team+': '+e.message)}}
+   }
+  }
+  shareStatus('Finished: '+copied+' copied, '+skipped+' skipped (already exists or same source).'+(errors.length?'\n'+errors.join('\n'):'')+'\nSwitch to a destination league and Refresh to see the copies.');
+  message('Team sharing finished: '+copied+' copied, '+skipped+' skipped, '+errors.length+' issue(s).');
+ }finally{btn.disabled=false}
+}
 // V129: Promote the checked SAVED database artboards, not the editor's active board.
 async function shareSelectedLeagueWide(){
  if(activeBrand!=='pwhl'&&activeBrand!=='bchl')throw Error('Switch to PWHL or BCHL to save league-wide artwork.');
@@ -462,6 +537,7 @@ window.RinkboardBandDropbox={
  async deleteLogo(name){const path=base()+'/Team Logos/'+name;const res=await fetch('https://api.dropboxapi.com/2/files/delete_v2',{method:'POST',headers:{Authorization:'Bearer '+ensure(),'Content-Type':'application/json'},body:JSON.stringify({path})});if(!res.ok&&res.status!==409)throw Error('Could not remove old logo '+name)}
 };
 window.addEventListener('rinkboard-brand-changed',event=>perform(()=>switchDatabaseBrand(event.detail.brand)));
+window.addEventListener('rinkboard-ncaa-division-changed',()=>{if(activeBrand==='ncaa')perform(async()=>{config.folder=brandRoot();$('dbFolder').value=config.folder;entries=[];selectedRecord=null;selectedPaths.clear();exportQuantities.clear();folderChoices={teams:new Set(),seasons:new Set(),sizes:new Set()};$('dbTeam').value='';$('dbSeason').value='';$('builderTeam').value='';$('builderSeason').value='';builderChoices();render();groupRender();if(!expired())await refresh();});});
 $('builderDbSave').onclick=()=>perform(builderSave);
 $('builderTeam').addEventListener('change',()=>{if($('builderTeam').value==='__add__'){perform(()=>builderAddCategory('team'));return}$('builderSeason').value='';builderChoices();syncBuilderProjectSeason()});
 // Handle the native dropdown directly, without the global busy gate. The menu's
@@ -541,7 +617,7 @@ $('dbBulkExport').onclick=()=>{bulkEl('dbBulkOverlay').hidden=true;$('dbExportPr
 updateLeagueControl();$('databaseOpen').onclick=()=>{$('dbOverlay').hidden=false;if(!expired()&&!entries.length)perform(refresh)};$('dbClose').onclick=()=>{$('dbOverlay').hidden=true};$('dbOverlay').addEventListener('click',e=>{if(e.target===$('dbOverlay'))$('dbOverlay').hidden=true});$('dbAppKey').value=config.appKey;$('dbFolder').value=config.folder;$('dbApply').onclick=applyConfig;$('dbConnect').onclick=()=>perform(login);$('dbRefresh').onclick=()=>perform(refresh);$('dbRebuildPreviews').onclick=()=>perform(rebuildSelectedPreviews);$('dbSave').onclick=()=>perform(saveCurrent);$('dbSaveAll').onclick=()=>perform(saveAll);$('dbGroupSave').onclick=groupSave;$('dbGroupLoad').onclick=groupLoad;$('dbGroupDelete').onclick=groupDelete;groupRender();
  $('dbGroupTeam')?.addEventListener('change',()=>{$('dbGroupSeason').value='';groupScopeOptions();groupRender()});
  $('dbGroupSeason')?.addEventListener('change',groupRender);
- $('dbSelectVisible').onclick=()=>{visibleRecords.forEach(r=>selectedPaths.add(r.path));render()};$('dbClearSelection').onclick=()=>{selectedPaths.clear();render()};$('dbExportSelected').onclick=()=>perform(exportSelected);$('dbDeleteSelected').onclick=confirmDeleteSelected;$('dbShareSelected').onclick=()=>perform(shareSelectedLeagueWide);for(let id of ['dbTeam','dbSeason','dbSize'])$(id).addEventListener('change',()=>{if($(id).value==='__add__'){perform(()=>addCategory(id));return}if(id==='dbTeam'){$('dbSeason').value='';$('dbSize').value='all'}if(id==='dbSeason')$('dbSize').value='all';render();if(id==='dbTeam'||id==='dbSeason')groupRender()});$('dbSearch').addEventListener('input',render);if(!expired()){state('Connected');refresh().catch(e=>{console.error(e);message(e.message)})}completeOAuth().catch(e=>{console.error(e);message(e.message)});
+ $('dbSelectVisible').onclick=()=>{visibleRecords.forEach(r=>selectedPaths.add(r.path));render()};$('dbClearSelection').onclick=()=>{selectedPaths.clear();render()};$('dbExportSelected').onclick=()=>perform(exportSelected);$('dbDeleteSelected').onclick=confirmDeleteSelected;$('dbShareSelected').onclick=()=>perform(shareSelectedLeagueWide);$('dbShareTeams').onclick=()=>perform(openShareTeams);$('dbShareTeamsCancel').onclick=()=>shareUI('dbShareTeamsOverlay').hidden=true;$('dbShareTeamsConfirm').onclick=()=>copyShareTeams().catch(e=>shareStatus(e.message));for(let id of ['dbTeam','dbSeason','dbSize'])$(id).addEventListener('change',()=>{if($(id).value==='__add__'){perform(()=>addCategory(id));return}if(id==='dbTeam'){$('dbSeason').value='';$('dbSize').value='all'}if(id==='dbSeason')$('dbSize').value='all';render();if(id==='dbTeam'||id==='dbSeason')groupRender()});$('dbSearch').addEventListener('input',render);if(!expired()){state('Connected');refresh().catch(e=>{console.error(e);message(e.message)})}completeOAuth().catch(e=>{console.error(e);message(e.message)});
 
 // V96 Courier Label: use the exact database selection and its export quantities.
 const courierEl=id=>document.getElementById(id);
