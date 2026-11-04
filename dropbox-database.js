@@ -35,20 +35,23 @@ async function switchDatabaseBrand(next){
 // V99 — named selection groups. Store only paths and quantities, never artwork or credentials.
 // V111 — selections are scoped to the selected team AND season, not globally by brand.
 const groupLegacyKey=()=>`rinkboard-selection-groups-v99:${activeBrand}:${base().toLowerCase()}`;
-function groupScope(){return {team:($('dbGroupTeam')?.value||'').trim(),season:($('dbGroupSeason')?.value||'').trim()}}
+function groupScope(){
+ const team=($('dbGroupTeam')?.value||$('dbTeam')?.value||'').trim();
+ const season=($('dbGroupSeason')?.value||$('dbSeason')?.value||'').trim();
+ return {team,season};
+}
 function groupScopeOptions(){
  const teamSel=$('dbGroupTeam'),seasonSel=$('dbGroupSeason');if(!teamSel||!seasonSel)return;
- const currentTeam=teamSel.value||$('dbTeam').value;
- const teams=[...new Set([...entries.filter(e=>!isLeague(e)).map(e=>e.team),...[...folderChoices.teams].filter(t=>activeBrand!=='bchl'||t!==LEAGUE_TEAM),...presetTeams()])].filter(Boolean).sort((a,b)=>a.localeCompare(b));
+ const mainTeam=$('dbTeam')?.value||'',mainSeason=$('dbSeason')?.value||'';
+ const previousTeam=teamSel.value||mainTeam,previousSeason=seasonSel.value||mainSeason;
+ const teams=[...new Set([...entries.filter(e=>!isLeague(e)).map(e=>e.team),...[...folderChoices.teams].filter(t=>activeBrand!=='bchl'||t!==LEAGUE_TEAM),...presetTeams(),mainTeam])].filter(Boolean).sort((a,b)=>a.localeCompare(b));
  teamSel.replaceChildren(new Option('Select team…',''));for(const team of teams)teamSel.add(new Option(team,team));
- teamSel.value=teams.includes(currentTeam)?currentTeam:'';
- const currentSeason=seasonSel.value||$('dbSeason').value;
+ teamSel.value=teams.includes(previousTeam)?previousTeam:'';
  const team=teamSel.value;
- const seasons=[...new Set([...entries.filter(e=>inTeam(e,team)).map(e=>e.season),...[...folderChoices.seasons].filter(x=>x.startsWith(team+'/')).map(x=>x.slice(team.length+1))])].filter(Boolean).sort((a,b)=>a.localeCompare(b));
+ const seasons=[...new Set([...entries.filter(e=>inTeam(e,team)).map(e=>e.season),...[...folderChoices.seasons].filter(x=>x.startsWith(team+'/')).map(x=>x.slice(team.length+1)),...(team===mainTeam?[mainSeason]:[])])].filter(Boolean).sort((a,b)=>a.localeCompare(b));
  seasonSel.replaceChildren(new Option('Select season…',''));for(const season of seasons)seasonSel.add(new Option(season,season));
- seasonSel.value=seasons.includes(currentSeason)?currentSeason:'';
+ seasonSel.value=seasons.includes(previousSeason)?previousSeason:'';
 }
-
 function groupStorageKey(){const {team,season}=groupScope();return `rinkboard-selection-groups-v111:${activeBrand}:${base().toLowerCase()}:${encodeURIComponent(team)}:${encodeURIComponent(season)}`}
 function scopedItems(items,team,season){return Array.isArray(items)?items.filter(item=>{const e=entries.find(r=>r.path===item?.path);return e&&inScope(e,team,season)}):[]}
 function getGroups(){
@@ -71,13 +74,13 @@ function groupRender(){
  sel.replaceChildren(new Option(ready?'Choose a saved group…':'Select a team and season first…',''));
  for(const name of Object.keys(groups).sort((a,b)=>a.localeCompare(b)))sel.add(new Option(name,name));
  sel.value=Object.prototype.hasOwnProperty.call(groups,current)?current:'';
- for(const id of ['dbGroupSelect','dbGroupLoad','dbGroupSave','dbGroupDelete']){const el=$(id);if(el)el.disabled=!ready}
+ for(const id of ['dbGroupSelect','dbGroupLoad','dbGroupDelete']){const el=$(id);if(el)el.disabled=!ready}if($('dbGroupSave'))$('dbGroupSave').disabled=false
  const status=$('dbGroupStatus');if(status)status.textContent=ready?`Saved selections for ${team} / ${season}. Quantities are saved in this browser.`:'Select a team and season to view or save selections.';
 }
 function groupSave(){
  const {team,season}=groupScope();if(!team||!season){groupStatus('Select a team and season before saving.');return}
  const paths=[...selectedPaths].filter(path=>{const e=entries.find(r=>r.path===path);return e&&inScope(e,team,season)});
- if(!paths.length){groupStatus('Select at least one rinkboard for this team and season.');return}
+ if(!paths.length){groupStatus(`No selected rinkboards belong to ${team} / ${season}. Select artwork in the database first, or choose the team/year that matches your selection.`);return}
  const name=prompt(`Name this selection for ${team} / ${season} (e.g. Wave 2):`,'');if(name===null)return;
  const clean=name.trim();if(!clean||clean.length>80){groupStatus('Enter a group name between 1 and 80 characters.');return}
  const groups=getGroups();if(groups[clean]&&!confirm('Replace saved group "'+clean+'" for '+team+' / '+season+'?'))return;
@@ -186,7 +189,7 @@ async function builderSave(){
  $('builderDbHint').textContent='Saved '+name.name+' to '+ctx.team+' / '+ctx.season+' in Dropbox. Production PDF not regenerated.';
  message('Saved '+name.name+' to '+ctx.team+' / '+ctx.season+'. Production PDF not regenerated.');
 }
-async function refresh(){if(expired()){state('Not connected');message('Connect Dropbox first.');return}state('Connected');let all;try{all=await listAll()}catch(e){if(String(e).includes('not_found')){entries=[];builderChoices();render();message('No Dropbox folder yet for this brand. Select a team and season, then save a rinkboard to create it.');return}throw e}entries=all.map(parseEntry).filter(Boolean);await loadFolderChoices();builderChoices();selectedPaths=new Set([...selectedPaths].filter(p=>entries.some(e=>e.path===p)));exportQuantities=new Map([...exportQuantities].filter(([p])=>entries.some(e=>e.path===p)));render();message(`${entries.length} rinkboard${entries.length===1?'':'s'} found. Click any artboard name to open it in the editor.`)}
+async function refresh(){if(expired()){state('Not connected');message('Connect Dropbox first.');return}state('Connected');let all;try{all=await listAll()}catch(e){if(String(e).includes('not_found')){entries=[];builderChoices();render();message('No Dropbox folder yet for this brand. Select a team and season, then save a rinkboard to create it.');return}throw e}entries=all.map(parseEntry).filter(Boolean);await loadFolderChoices();builderChoices();selectedPaths=new Set([...selectedPaths].filter(p=>entries.some(e=>e.path===p)));exportQuantities=new Map([...exportQuantities].filter(([p])=>entries.some(e=>e.path===p)));render();groupRender();message(`${entries.length} rinkboard${entries.length===1?'':'s'} found. Click any artboard name to open it in the editor.`)}
 function setOptions(id,values,selected,allValue,allLabel){const el=$(id);el.replaceChildren();const first=document.createElement('option');first.value=allValue;first.textContent=allLabel;el.append(first);for(const value of values){const opt=document.createElement('option');opt.value=value;opt.textContent=id==='dbSize'?value.replace('x','″ × ')+'″':value;el.append(opt)}if(id!=='dbSize'){const add=document.createElement('option');add.value='__add__';add.textContent='+ Add New '+(id==='dbTeam'||id==='builderTeam'?'Team':'Season / Year')+'…';el.append(add);}el.value=values.includes(selected)?selected:allValue}
 const collapsedSizes=new Set();
 function setAllSizesCollapsed(collapse){
@@ -442,7 +445,7 @@ $('dbBulkApply').onclick=bulkApply;
 $('dbBulkExport').onclick=()=>{bulkEl('dbBulkOverlay').hidden=true;$('dbExportProof').checked=true;perform(exportSelected)};
 
 updateLeagueControl();$('databaseOpen').onclick=()=>{$('dbOverlay').hidden=false;if(!expired()&&!entries.length)perform(refresh)};$('dbClose').onclick=()=>{$('dbOverlay').hidden=true};$('dbOverlay').addEventListener('click',e=>{if(e.target===$('dbOverlay'))$('dbOverlay').hidden=true});$('dbAppKey').value=config.appKey;$('dbFolder').value=config.folder;$('dbApply').onclick=applyConfig;$('dbConnect').onclick=()=>perform(login);$('dbRefresh').onclick=()=>perform(refresh);$('dbRebuildPreviews').onclick=()=>perform(rebuildSelectedPreviews);$('dbSave').onclick=()=>perform(saveCurrent);$('dbSaveAll').onclick=()=>perform(saveAll);$('dbGroupSave').onclick=groupSave;$('dbGroupLoad').onclick=groupLoad;$('dbGroupDelete').onclick=groupDelete;groupRender();
- $('dbGroupTeam')?.addEventListener('change',()=>{$('dbGroupSeason').value='';groupRender()});
+ $('dbGroupTeam')?.addEventListener('change',()=>{$('dbGroupSeason').value='';groupScopeOptions();groupRender()});
  $('dbGroupSeason')?.addEventListener('change',groupRender);
  $('dbSelectVisible').onclick=()=>{visibleRecords.forEach(r=>selectedPaths.add(r.path));render()};$('dbClearSelection').onclick=()=>{selectedPaths.clear();render()};$('dbExportSelected').onclick=()=>perform(exportSelected);$('dbDeleteSelected').onclick=()=>perform(deleteSelected);for(let id of ['dbTeam','dbSeason','dbSize'])$(id).addEventListener('change',()=>{if($(id).value==='__add__'){perform(()=>addCategory(id));return}if(id==='dbTeam'){$('dbSeason').value='';$('dbSize').value='all'}if(id==='dbSeason')$('dbSize').value='all';render();if(id==='dbTeam'||id==='dbSeason')groupRender()});$('dbSearch').addEventListener('input',render);if(!expired()){state('Connected');refresh().catch(e=>{console.error(e);message(e.message)})}completeOAuth().catch(e=>{console.error(e);message(e.message)});
 
