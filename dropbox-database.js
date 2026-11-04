@@ -10,17 +10,19 @@ const LEAGUE_TEAM='League-Wide';
 const isLeague=e=>activeBrand==='bchl'&&e.team===LEAGUE_TEAM;
 const inTeam=(e,team)=>!team||e.team===team||isLeague(e);
 const inScope=(e,team,season)=>inTeam(e,team)&&(!season||e.season===season);
+const PWHL_TEAMS = ['Boston Fleet','Minnesota Frost','Montréal Victoire','New York Sirens','Ottawa Charge','Toronto Sceptres','Vancouver Goldeneyes','Seattle Torrent','PWHL Detroit','PWHL Hamilton','PWHL Las Vegas','PWHL San Jose'];
+const PWHL_ROOT_KEY='rinkboard-pwhl-root-v116';
 const BCHL_TEAMS = ["Alberni Valley Bulldogs", "Cowichan Valley Capitals", "Nanaimo Clippers", "Powell River Kings", "Victoria Grizzlies", "Chilliwack Chiefs", "Coquitlam Express", "Langley Rivermen", "Prince George Spruce Kings", "Surrey Eagles", "Cranbrook Bucks", "Salmon Arm Silverbacks", "Trail Smoke Eaters", "Vernon Vipers", "West Kelowna Warriors", "Blackfalds Bulldogs", "Brooks Bandits", "Okotoks Oilers", "Sherwood Park Crusaders", "Spruce Grove Saints"];
 const bchlRootKey='rinkboard-bchl-root-v88';
 const brandKey='rinkboard-active-brand-v85';
-let activeBrand=localStorage.getItem(brandKey)==='bchl'?'bchl':'blast';
+let activeBrand=['bchl','pwhl'].includes(localStorage.getItem(brandKey))?localStorage.getItem(brandKey):'blast';
 let blastFolder=config.folder||'/Rinkboard Database';
-function brandRoot(){return activeBrand==='bchl'?(localStorage.getItem(bchlRootKey)||'/BCHL Rinkboards'):blastFolder}
-function presetTeams(){return activeBrand==='bchl'?BCHL_TEAMS:[]}
+function brandRoot(){return activeBrand==='bchl'?(localStorage.getItem(bchlRootKey)||'/BCHL Rinkboards'):activeBrand==='pwhl'?(localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards'):blastFolder}
+function presetTeams(){return activeBrand==='bchl'?BCHL_TEAMS:activeBrand==='pwhl'?PWHL_TEAMS:[]}
 config.folder=brandRoot();
 function updateLeagueControl(){const label=$('dbLeagueWideLabel');if(label)label.style.display=activeBrand==='bchl'?'flex':'none'}
 async function switchDatabaseBrand(next){
- next=next==='bchl'?'bchl':'blast';
+ next=['bchl','pwhl'].includes(next)?next:'blast';
  if(next===activeBrand)return;
  activeBrand=next;config.folder=brandRoot();updateLeagueControl();$('dbFolder').value=config.folder;
  entries=[];selectedRecord=null;selectedPaths.clear();exportQuantities.clear();visibleRecords=[];
@@ -28,7 +30,7 @@ async function switchDatabaseBrand(next){
  $('dbTeam').value='';$('dbSeason').value='';$('dbSize').value='all';
  $('builderTeam').value='';$('builderSeason').value='';
  builderChoices();render();groupRender();
- message(activeBrand==='bchl'?'BCHL: select a team and season, or add a new one.':'Blast Media database selected.');
+ message(activeBrand==='bchl'?'BCHL: select a team and season, or add a new one.':activeBrand==='pwhl'?'PWHL: select a team and season, or add a new one.':'Blast Media database selected.');
  if(!expired())await refresh();
 }
 
@@ -128,10 +130,11 @@ function setBusy(b){busy=b;for(let id of ['dbSave','dbSaveAll','dbRefresh','dbCo
 async function perform(fn){if(busy)return;setBusy(true);try{await fn()}catch(e){console.error(e);message(e.message||String(e))}finally{setBusy(false)}}
 function applyConfig(){
  const nextKey=$('dbAppKey').value.trim();
- const nextFolder=$('dbFolder').value.trim().replace(/\/+$/,'')||(activeBrand==='bchl'?'/BCHL Rinkboards':'/Rinkboard Database');
+ const nextFolder=$('dbFolder').value.trim().replace(/\/+$/,'')||(activeBrand==='bchl'?'/BCHL Rinkboards':activeBrand==='pwhl'?'/PWHL Rinkboards':'/Rinkboard Database');
  const changed=nextFolder!==config.folder||nextKey!==config.appKey;
  config.appKey=nextKey;config.folder=nextFolder;
  if(activeBrand==='bchl')localStorage.setItem(bchlRootKey,nextFolder);
+ if(activeBrand==='pwhl')localStorage.setItem(PWHL_ROOT_KEY,nextFolder);
  else blastFolder=nextFolder;
  localStorage.setItem(cfgKey,JSON.stringify({appKey:config.appKey,folder:blastFolder}));
  if(changed){entries=[];selectedRecord=null;selectedPaths.clear();exportQuantities.clear();visibleRecords=[];folderChoices={teams:new Set(),seasons:new Set(),sizes:new Set()};builderChoices();render()}
