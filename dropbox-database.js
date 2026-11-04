@@ -126,7 +126,7 @@ function parseSavedProject(raw,record){
 async function upload(path,content,rev,overwrite=false){let args={path,mode:rev?{'.tag':'update',update:rev}:overwrite?'overwrite':'add',autorename:false,mute:true,strict_conflict:true};let res=await fetch(CONTENT+'/files/upload',{method:'POST',headers:{Authorization:'Bearer '+ensure(),'Dropbox-API-Arg':JSON.stringify(args),'Content-Type':'application/octet-stream'},body:content});if(!res.ok){let t=await res.text();if(res.status===409)throw Error('Dropbox conflict: this file may have changed or already exist. Refresh the database before saving. '+t.slice(0,120));throw Error('Upload: '+t.slice(0,350))}return await res.json()}
 async function mkdir(path){try{await rpc('/files/create_folder_v2',{path,autorename:false})}catch(e){if(!String(e).includes('conflict'))throw e}}
 async function ensureFolders(path){let parts=path.split('/').filter(Boolean),curr='';for(let part of parts){curr+='/'+part;await mkdir(curr)}}
-function setBusy(b){busy=b;for(let id of ['dbSave','dbSaveAll','dbRefresh','dbConnect','dbExportSelected','dbDeleteSelected','builderDbSave','dbRebuildPreviews'])$(id).disabled=b}
+function setBusy(b){busy=b;for(let id of ['dbSave','dbSaveAll','dbRefresh','dbConnect','dbExportSelected','dbDeleteSelected','dbShareSelected','builderDbSave','dbRebuildPreviews'])$(id).disabled=b}
 async function perform(fn){if(busy)return;setBusy(true);try{await fn()}catch(e){console.error(e);message(e.message||String(e))}finally{setBusy(false)}}
 function applyConfig(){
  const nextKey=$('dbAppKey').value.trim();
@@ -352,6 +352,41 @@ async function saveOne(index,ctx){
  // The existing production PDF, if any, is not refreshed by this operation.
  return {name,pdfSaved:false,pdfError:'Production PDF not regenerated; export it separately when ready.'};
 }
+// V129: Promote the checked SAVED database artboards, not the editor's active board.
+async function shareSelectedLeagueWide(){
+ if(activeBrand!=='pwhl'&&activeBrand!=='bchl')throw Error('Switch to PWHL or BCHL to save league-wide artwork.');
+ if(expired())throw Error('Connect Dropbox before saving league-wide artwork.');
+ const chosen=entries.filter(e=>selectedPaths.has(e.path));
+ if(!chosen.length)throw Error('Select one or more saved rinkboards using their database checkboxes first.');
+ const targets=chosen.filter(e=>!isLeague(e));
+ if(!targets.length){message('All selected rinkboards are already League-Wide.');return}
+ const targetPaths=new Set(),operations=[];
+ for(const record of targets){
+  const dest=parent(LEAGUE_TEAM,record.season,record.width)+'/'+pathPart(record.name)+'.rinkboard.json';
+  const key=dest.toLowerCase();
+  if(targetPaths.has(key))throw Error('Two selected rinkboards have the same sponsor, width and season. Select only one of them for League-Wide: '+record.name);
+  targetPaths.add(key);operations.push({record,dest});
+ }
+ if(!confirm('Save '+operations.length+' selected rinkboard(s) as League-Wide for ALL '+activeBrand.toUpperCase()+' teams?\n\nEach will be shared with teams in its original season. Team-specific originals will be kept. Existing League-Wide copies with the same name and width will be replaced.')){message('League-Wide save cancelled.');return}
+ let done=0,errors=[];
+ for(const {record,dest} of operations){
+  try{
+   message('Saving League-Wide '+(done+errors.length+1)+' / '+operations.length+': '+record.name);
+   const source=parseSavedProject(await download(record.path),record);
+   source.team=LEAGUE_TEAM;source.season=record.season;source.sponsor=record.name;source.width=record.width;source.updatedAt=new Date().toISOString();
+   await ensureFolders(parent(LEAGUE_TEAM,record.season,record.width));
+   const meta=await upload(dest,JSON.stringify(source),null,true);
+   const newRecord=parseEntry(meta);
+   if(newRecord){entries=entries.filter(e=>e.path.toLowerCase()!==dest.toLowerCase());entries.push(newRecord)}
+   const oldPreview=record.path.replace(/\.rinkboard\.json$/i,'.preview.svg');
+   const newPreview=dest.replace(/\.rinkboard\.json$/i,'.preview.svg');
+   try{const svg=await download(oldPreview);await upload(newPreview,svg,null,true);hoverPreviewCache.delete(newPreview)}catch(e){console.warn('Could not copy League-Wide preview',record.name,e)}
+   done++;
+  }catch(e){console.error('League-Wide save failed',record.path,e);errors.push(record.name+': '+(e.message||e))}
+ }
+ render();builderChoices();
+ message('Saved '+done+' of '+operations.length+' selected rinkboards as League-Wide.'+(errors.length?' Failed: '+errors.join(' | '):' They are now available to all '+activeBrand.toUpperCase()+' teams in the corresponding seasons.'));
+}
 async function saveCurrent(){const ctx=context(),obj=window.RinkboardBridge.getProject(),result=await saveOne(obj.activeBoard,ctx);render();message(`Saved ${result.name} to Dropbox. Production PDF not regenerated; export it separately when ready.`)}
 async function saveAll(){const ctx=context(),obj=window.RinkboardBridge.getProject(),done=[];for(let i=0;i<obj.boards.length;i++)done.push(await saveOne(i,ctx));render();message(`Saved ${done.length} editable artboards to Dropbox. Production PDFs not regenerated; export separately when ready.`)}
 // V75: Repair all Dropbox previews from saved editable projects, without changing their JSON.
@@ -476,7 +511,7 @@ $('dbBulkExport').onclick=()=>{bulkEl('dbBulkOverlay').hidden=true;$('dbExportPr
 updateLeagueControl();$('databaseOpen').onclick=()=>{$('dbOverlay').hidden=false;if(!expired()&&!entries.length)perform(refresh)};$('dbClose').onclick=()=>{$('dbOverlay').hidden=true};$('dbOverlay').addEventListener('click',e=>{if(e.target===$('dbOverlay'))$('dbOverlay').hidden=true});$('dbAppKey').value=config.appKey;$('dbFolder').value=config.folder;$('dbApply').onclick=applyConfig;$('dbConnect').onclick=()=>perform(login);$('dbRefresh').onclick=()=>perform(refresh);$('dbRebuildPreviews').onclick=()=>perform(rebuildSelectedPreviews);$('dbSave').onclick=()=>perform(saveCurrent);$('dbSaveAll').onclick=()=>perform(saveAll);$('dbGroupSave').onclick=groupSave;$('dbGroupLoad').onclick=groupLoad;$('dbGroupDelete').onclick=groupDelete;groupRender();
  $('dbGroupTeam')?.addEventListener('change',()=>{$('dbGroupSeason').value='';groupScopeOptions();groupRender()});
  $('dbGroupSeason')?.addEventListener('change',groupRender);
- $('dbSelectVisible').onclick=()=>{visibleRecords.forEach(r=>selectedPaths.add(r.path));render()};$('dbClearSelection').onclick=()=>{selectedPaths.clear();render()};$('dbExportSelected').onclick=()=>perform(exportSelected);$('dbDeleteSelected').onclick=confirmDeleteSelected;for(let id of ['dbTeam','dbSeason','dbSize'])$(id).addEventListener('change',()=>{if($(id).value==='__add__'){perform(()=>addCategory(id));return}if(id==='dbTeam'){$('dbSeason').value='';$('dbSize').value='all'}if(id==='dbSeason')$('dbSize').value='all';render();if(id==='dbTeam'||id==='dbSeason')groupRender()});$('dbSearch').addEventListener('input',render);if(!expired()){state('Connected');refresh().catch(e=>{console.error(e);message(e.message)})}completeOAuth().catch(e=>{console.error(e);message(e.message)});
+ $('dbSelectVisible').onclick=()=>{visibleRecords.forEach(r=>selectedPaths.add(r.path));render()};$('dbClearSelection').onclick=()=>{selectedPaths.clear();render()};$('dbExportSelected').onclick=()=>perform(exportSelected);$('dbDeleteSelected').onclick=confirmDeleteSelected;$('dbShareSelected').onclick=()=>perform(shareSelectedLeagueWide);for(let id of ['dbTeam','dbSeason','dbSize'])$(id).addEventListener('change',()=>{if($(id).value==='__add__'){perform(()=>addCategory(id));return}if(id==='dbTeam'){$('dbSeason').value='';$('dbSize').value='all'}if(id==='dbSeason')$('dbSize').value='all';render();if(id==='dbTeam'||id==='dbSeason')groupRender()});$('dbSearch').addEventListener('input',render);if(!expired()){state('Connected');refresh().catch(e=>{console.error(e);message(e.message)})}completeOAuth().catch(e=>{console.error(e);message(e.message)});
 
 // V96 Courier Label: use the exact database selection and its export quantities.
 const courierEl=id=>document.getElementById(id);
