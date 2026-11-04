@@ -175,7 +175,7 @@ async function builderAddCategory(type){
  const folder=type==='team'?base()+'/'+name:base()+'/'+team+'/'+name;
  // A disconnected Dropbox must not make the menu appear unresponsive.
  // Keep the season selectable locally; Dropbox folder will be created on save.
- if(!expired())await ensureFolders(folder);
+ if(!expired()){try{await ensureFolders(folder)}catch(e){message('Dropbox folder creation failed: '+e.message+'; season will remain available locally until you save.')}}
  if(type==='team')folderChoices.teams.add(name);else folderChoices.seasons.add(team+'/'+name);
  // Restore the actual selected team before rebuilding options. Never retain the + Add sentinel.
  teamEl.value=type==='team'?'':team;
@@ -197,7 +197,7 @@ async function builderSave(){
  $('builderDbHint').textContent='Saved '+name.name+' to '+ctx.team+' / '+ctx.season+' in Dropbox. Production PDF not regenerated.';
  message('Saved '+name.name+' to '+ctx.team+' / '+ctx.season+'. Production PDF not regenerated.');
 }
-async function refresh(){if(expired()){state('Not connected');message('Connect Dropbox first.');return}state('Connected');let all;try{all=await listAll()}catch(e){if(String(e).includes('not_found')){entries=[];builderChoices();render();message('No Dropbox folder yet for this brand. Select a team and season, then save a rinkboard to create it.');return}throw e}entries=all.map(parseEntry).filter(Boolean);await loadFolderChoices();builderChoices();selectedPaths=new Set([...selectedPaths].filter(p=>entries.some(e=>e.path===p)));exportQuantities=new Map([...exportQuantities].filter(([p])=>entries.some(e=>e.path===p)));render();groupRender();message(`${entries.length} rinkboard${entries.length===1?'':'s'} found. Click any artboard name to open it in the editor.`)}
+async function refresh(){if(expired()){state('Not connected');message('Connect Dropbox first.');return}state('Connected');let all;try{all=await listAll()}catch(e){if(String(e).includes('not_found')){entries=[];folderChoices={teams:new Set(),seasons:new Set(),sizes:new Set()};builderChoices();render();message('No Dropbox folder yet for this brand. Select a team and season, then save a rinkboard to create it.');return}throw e}entries=all.map(parseEntry).filter(Boolean);await loadFolderChoices();builderChoices();selectedPaths=new Set([...selectedPaths].filter(p=>entries.some(e=>e.path===p)));exportQuantities=new Map([...exportQuantities].filter(([p])=>entries.some(e=>e.path===p)));render();groupRender();message(`${entries.length} rinkboard${entries.length===1?'':'s'} found. Click any artboard name to open it in the editor.`)}
 function setOptions(id,values,selected,allValue,allLabel){const el=$(id);el.replaceChildren();const first=document.createElement('option');first.value=allValue;first.textContent=allLabel;el.append(first);for(const value of values){const opt=document.createElement('option');opt.value=value;opt.textContent=id==='dbSize'?value.replace('x','″ × ')+'″':value;el.append(opt)}if(id!=='dbSize'){const add=document.createElement('option');add.value='__add__';add.textContent='+ Add New '+(id==='dbTeam'||id==='builderTeam'?'Team':'Season / Year')+'…';el.append(add);}el.value=values.includes(selected)?selected:allValue}
 const collapsedSizes=new Set();
 function setAllSizesCollapsed(collapse){
@@ -404,7 +404,7 @@ function onBuilderSeasonSelection(){
  // Restore the select before showing the prompt, so cancel never leaves a sentinel.
  const team=$('builderTeam').value;
  $('builderSeason').value='';
- Promise.resolve().then(()=>builderAddCategory('season')).catch(e=>{
+ builderAddCategory('season').catch(e=>{
    console.error(e);message(e.message||String(e));
    $('builderTeam').value=team;builderChoices();
  }).finally(()=>{addingBuilderSeason=false});
