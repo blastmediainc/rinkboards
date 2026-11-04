@@ -477,7 +477,7 @@ const courierReturnAddresses={
  usa:['1875 W. COMMONWEALTH AVE, UNIT H','FULLERTON, CA 92833']
 };
 function courierReturnLines(){return courierReturnAddresses[courierEl('courierReturnAddress')?.value]||courierReturnAddresses.canada}
-function courierReturnUpdate(){const preview=courierEl('courierReturnPreview');if(preview)preview.textContent=courierReturnLines().join('\\n')}
+function courierReturnUpdate(){const preview=courierEl('courierReturnPreview');if(preview)preview.textContent=courierReturnLines().join('\n')}
 function courierText(){const heading=courierEl('courierDate').value.trim().toUpperCase();const attention=courierEl('courierName').value.trim().toUpperCase();const location=courierEl('courierLocation').value.trim().toUpperCase();return heading+'\n\nATTN: '+attention+'\n'+location}
 // Load the supplied Neo Sans Bold into jsPDF so the printed PDF matches the on-screen label.
 let courierFontData=null;
