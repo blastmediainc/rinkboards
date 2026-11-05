@@ -618,7 +618,7 @@ $('dbBulkApply').onclick=bulkApply;
 $('dbBulkExport').onclick=()=>{bulkEl('dbBulkOverlay').hidden=true;$('dbExportProof').checked=true;perform(exportSelected)};
 
 
-// V143: explicit, scoped recovery. Never write while scanning.
+// V144: scoped recovery for any team in the currently selected league. Never write while scanning.
 let recoveryRows=[],recoveryScanning=false;
 function recoveryStatus(msg){const el=$('dbRecoveryStatus');if(el)el.textContent=msg}
 function recoveryUI(){return $('dbRecoveryOverlay')}
@@ -628,19 +628,19 @@ function recoveryDraw(){
  for(const r of recoveryRows){const tr=document.createElement('tr');
   const check=document.createElement('input');check.type='checkbox';check.checked=!!r.validRev;check.disabled=!r.validRev;check.dataset.path=r.path;
   const td0=document.createElement('td');td0.append(check);
-  for(const value of [r.season+' / '+r.name,r.currentState,r.validRev?'Recoverable: '+new Date(r.validDate).toLocaleString():'No valid previous version found']){const td=document.createElement('td');td.textContent=value;tr.append(td)}
+  for(const value of [r.team+' / '+r.season+' / '+r.name,r.currentState,r.validRev?'Recoverable: '+new Date(r.validDate).toLocaleString():'No valid previous version found']){const td=document.createElement('td');td.textContent=value;tr.append(td)}
   tr.prepend(td0);tbody.append(tr);
  }
  $('dbRecoveryRestore').disabled=!recoveryRows.some(r=>r.validRev);
 }
 async function recoveryScan(){
- if(activeBrand!=='nhl')throw Error('Switch to NHL mode before running Canucks recovery.');
+
  if(expired())throw Error('Connect Dropbox before scanning.');
  if(recoveryScanning) return;
  recoveryScanning=true;recoveryRows=[];$('dbRecoveryRows').replaceChildren();$('dbRecoveryRestore').disabled=true;
  try{
-  const root=base()+'/Vancouver Canucks';let listing;
-  try{listing=await rpc('/files/list_folder',{path:root,recursive:true,limit:2000})}catch(e){if(String(e).includes('not_found'))throw Error('No Vancouver Canucks folder found under '+base());throw e}
+  const root=base();const teamFilter=$('dbRecoveryTeam').value;const scanBrand=activeBrand;let listing;
+  try{listing=await rpc('/files/list_folder',{path:root,recursive:true,limit:2000})}catch(e){if(String(e).includes('not_found'))throw Error('No Dropbox folder found at '+root);throw e}
   const files=[];while(true){files.push(...listing.entries.filter(e=>e['.tag']==='file'&&/\.rinkboard\.json$/i.test(e.name)));if(!listing.has_more)break;listing=await rpc('/files/list_folder/continue',{cursor:listing.cursor})}
   files.sort((a,b)=>(a.path_display||'').localeCompare(b.path_display||''));
   let scanned=0,corrupt=0,recoverable=0;
@@ -648,7 +648,9 @@ async function recoveryScan(){
    const path=f.path_display||f.path_lower;
    if(!path.toLowerCase().startsWith((root+'/').toLowerCase()))continue;
    const rel=path.slice(root.length+1).split('/');
-   const r={path,rev:f.rev,season:rel[0]||'Unknown',name:f.name,currentState:'',validRev:null,validDate:null};
+   const team=rel[0]||'Unknown';if(teamFilter&&team!==teamFilter)continue;
+   if(team==='Team Logos')continue;
+   const r={path,rev:f.rev,brand:scanBrand,team,season:rel[1]||'Unknown',name:f.name,currentState:'',validRev:null,validDate:null};
    try{const raw=await download(path);if(recoveryValid(raw,r)){r.currentState='Valid JSON — no recovery needed';scanned++;recoveryStatus('Scanned '+scanned+'/'+files.length+'…');continue}r.currentState='Corrupted JSON / SVG';corrupt++}
    catch(e){r.currentState='Cannot read current file: '+String(e.message).slice(0,95);corrupt++}
    try{
@@ -663,11 +665,12 @@ async function recoveryScan(){
  }finally{recoveryScanning=false}
 }
 async function recoveryRestore(){
- if(activeBrand!=='nhl')throw Error('Switch to NHL mode before restoring.');
+ if(recoveryRows.some(r=>r.brand!==activeBrand))throw Error('League changed since scan. Scan again before restoring.');
+ if(expired())throw Error('Connect Dropbox before restoring.');
  const paths=new Set([...$('dbRecoveryRows').querySelectorAll('input[type="checkbox"]:checked')].map(el=>el.dataset.path));
  const chosen=recoveryRows.filter(r=>paths.has(r.path)&&r.validRev);
  if(!chosen.length)throw Error('Select at least one recoverable file.');
- if(!confirm('Restore '+chosen.length+' Vancouver Canucks project(s) from verified JSON revisions? This will update Dropbox files. Continue?'))return;
+ if(!confirm('Restore '+chosen.length+' project(s) in '+activeBrand.toUpperCase()+' from verified JSON revisions? This will update Dropbox files. Continue?'))return;
  $('dbRecoveryRestore').disabled=true;let ok=0,failed=0;
  for(const r of chosen){
   try{
@@ -683,7 +686,8 @@ async function recoveryRestore(){
  }
  recoveryStatus('Restore complete: '+ok+' restored, '+failed+' failed. Refresh the database, confirm the projects open, then regenerate previews.');
 }
-$('dbRecoveryOpen').onclick=()=>{recoveryUI().hidden=false;recoveryStatus('Ready. Scan only reads files and history.');};
+$('dbRecoveryOpen').onclick=()=>{const sel=$('dbRecoveryTeam');sel.replaceChildren(new Option('All teams in selected league',''));const names=new Set([...entries.map(e=>e.team),...folderChoices.teams,...presetTeams()].filter(t=>t&&t!=='Team Logos'));for(const name of [...names].sort((a,b)=>a.localeCompare(b)))sel.add(new Option(name,name));const selected=$('dbTeam').value;if(names.has(selected))sel.value=selected;recoveryRows=[];$('dbRecoveryRows').replaceChildren();$('dbRecoveryRestore').disabled=true;recoveryUI().hidden=false;recoveryStatus('Ready. Current league: '+activeBrand.toUpperCase()+'. Scan only reads files and history.');};
+$('dbRecoveryTeam').onchange=()=>{recoveryRows=[];$('dbRecoveryRows').replaceChildren();$('dbRecoveryRestore').disabled=true;recoveryStatus('Scope changed. Scan again before restoring.');};
 $('dbRecoveryClose').onclick=()=>recoveryUI().hidden=true;
 $('dbRecoveryScan').onclick=()=>perform(recoveryScan);
 $('dbRecoveryRestore').onclick=()=>perform(recoveryRestore);
