@@ -54,7 +54,7 @@ ctx.font='700 17px "Neo Sans Bold"';ctx.fillText('RINKBOARDS ('+$('bandSize').va
 ctx.font='700 16px "Neo Sans Bold"';ctx.fillText('SHIPPED '+formatMonth($('bandMonth').value),1021,54);
 ctx.strokeStyle='#111';ctx.lineWidth=1.5;ctx.strokeRect(853,80,329,72);
 if(boardData){try{drawFit(ctx,await image(boardData),861,85,313,62)}catch{}}
-ctx.font='700 17px "Neo Sans Bold"';ctx.fillText($('bandSeason').value.trim().toUpperCase()+' SEASON',1021,193);
+ctx.font='700 17px "Neo Sans Bold"';ctx.fillText($('bandSeason').value.trim().toUpperCase(),1021,193);
 }
 function svgToData(svg){return new Promise((resolve,reject)=>{const url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));const img=new Image();img.onload=()=>{try{const ratio=(img.naturalWidth||1200)/(img.naturalHeight||300);if(!Number.isFinite(ratio)||ratio<=0)throw Error('Invalid board preview dimensions');const c=document.createElement('canvas');c.width=2400;c.height=Math.max(1,Math.min(2400,Math.round(2400/ratio)));const ctx=c.getContext('2d',{alpha:false});ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(img,0,0,c.width,c.height);resolve(c.toDataURL('image/png'))}catch(e){reject(e)}finally{URL.revokeObjectURL(url)}};img.onerror=()=>{URL.revokeObjectURL(url);reject(Error('Board preview could not be rendered'))};img.src=url})}
 async function getBoard(){if(source==='builder'){const p=window.RinkboardBridge.getProject();const idx=p.activeBoard;board=p.boards[idx];if(!board)throw Error('No active board');return window.RinkboardBridge.getBoardPreview(idx)}const d=JSON.parse(await api().downloadText(selectedRecord.path));board=d.project?.boards?.[0];if(!board)throw Error('Invalid saved board');return api().downloadText(selectedRecord.path.replace(/\.rinkboard\.json$/i,'.preview.svg'))}
@@ -267,7 +267,7 @@ async function exportBand(){
  // Use the exact browser-rendered preview, at high resolution, in the PDF.
  if(!boardData)throw Error('Board preview is missing. Reload the band before exporting.');
  await fitImage(boardData,861,85,313,62);
- center($('bandSeason').value.trim().toUpperCase()+' SEASON',1021,199,17);
+ center($('bandSeason').value.trim().toUpperCase(),1021,199,17);
  return doc;
 }
 $('bandExport').onclick=async()=>{try{status('Creating colour-accurate PDF…');const doc=await exportBand();const name=bandFileName($('bandTeam').value,$('bandSponsor').value,$('bandSize').value);saveBand(await finalizeBand(doc),name);status('Band PDF exported with colour-accurate artwork preview')}catch(e){status('Export failed: '+e.message);console.error(e)}};

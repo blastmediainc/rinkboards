@@ -701,14 +701,18 @@ updateLeagueControl();$('databaseOpen').onclick=()=>{$('dbOverlay').hidden=false
 const courierEl=id=>document.getElementById(id);
 const courierEsc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let courierSelected=[];
-function courierItems(){return entries.filter(e=>selectedPaths.has(e.path)).map(e=>({...e,qty:exportQuantities.get(e.path)??1}));}
+function courierItems(){return entries.filter(e=>selectedPaths.has(e.path)).map(e=>({...e,qty:exportQuantities.get(e.path)??1})).sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),undefined,{sensitivity:"base",numeric:true})||String(a.path||"").localeCompare(String(b.path||"")));}
 function courierTotal(){return courierSelected.reduce((sum,e)=>sum+e.qty,0)}
 // Layout is based on distinct artwork count, never the sum of printed quantities.
 function courierLayout(count){
-  if(count===1)return {cols:1,width:344,height:82,gapX:0,gapY:0};
-  if(count<=4)return {cols:2,width:169,height:70,gapX:7,gapY:9};
-  const cols=4, rows=Math.ceil(count/cols), gapY=5;
-  return {cols,width:95,height:Math.min(43,(177-(rows-1)*gapY)/rows),gapX:6,gapY};
+  // Match the builder's preview grid, including every selected design.
+  // The printable artwork region is x=35..433, y=159..335.
+  const cols=count===1?1:count<=4?2:4;
+  const rows=Math.ceil(count/cols);
+  const gapX=cols===1?0:7, gapY=rows===1?0:5;
+  const width=cols===1?398:(398-(cols-1)*gapX)/cols;
+  const height=Math.max(1,(176-(rows-1)*gapY)/rows);
+  return {cols,width,height,gapX,gapY};
 }
 function courierFitImage(doc,data,x,y,w,h){
   // Fit the entire saved rinkboard preview inside the label slot without cropping.
@@ -760,12 +764,12 @@ function courierSvgToPng(svg){
 }
 
 async function courierOpen(){courierReturnUpdate();courierSelected=courierItems();if(!courierSelected.length){message('Select rinkboards using the database checkboxes before creating a courier label.');return}if(courierSelected.some(e=>!Number.isSafeInteger(e.qty)||e.qty<1||e.qty>500)){message('Check the selected quantities (1–500).');return}courierEl('courierOverlay').hidden=false;courierEl('courierItems').replaceChildren();courierEl('courierArtwork').replaceChildren();courierEl('courierArtwork').dataset.count=String(courierSelected.length);const header=document.querySelector('.brand-logo')||document.querySelector('.brand img');if(header)courierEl('courierBlastLogo').src=header.dataset.originalSrc||header.src;courierSelected.forEach(e=>{const tr=document.createElement('tr');for(const val of [e.name,e.size,String(e.qty)]){const td=document.createElement('td');td.textContent=val;tr.append(td)}courierEl('courierItems').append(tr);const tile=document.createElement('div');tile.className='courierArt';const fallback=document.createElement('span');fallback.textContent=e.name;tile.append(fallback);courierEl('courierArtwork').append(tile)});courierEl('courierSummary').textContent=courierSelected.length+' selected designs · '+courierTotal()+' total rinkboards';courierUpdate();courierEl('courierStatus').textContent='Loading artwork previews from Dropbox…';let failed=0;for(let i=0;i<courierSelected.length;i++){const e=courierSelected[i],tile=courierEl('courierArtwork').children[i];try{const svg=await download(e.path.replace(/\.rinkboard\.json$/i,'.preview.svg'));const png=await courierSvgToPng(svg);e.courierImage=png;tile.replaceChildren();const img=new Image();img.src=png;img.alt=e.name;img.title=e.name+' × '+e.qty;tile.append(img)}catch(err){failed++;console.warn('Courier artwork preview failed:',e.name,err)}}courierEl('courierStatus').textContent=failed?failed+' artwork previews unavailable; names will be printed instead.':'Ready to download.'}
-async function courierExport(){if(!courierSelected.length)return;const btn=courierEl('courierExport');btn.disabled=true;try{if(!window.jspdf?.jsPDF)throw Error('PDF library is not loaded. Reload while connected to the internet.');const doc=new window.jspdf.jsPDF({orientation:'landscape',unit:'pt',format:[792,396],compress:true});const neoFontReady=await courierSetPdfFont(doc);doc.setDrawColor(35);doc.setLineWidth(1.3);doc.rect(12,12,768,372);const logo=courierEl('courierBlastLogo');if(logo?.complete&&logo.naturalWidth){try{const c=document.createElement('canvas');c.width=logo.naturalWidth;c.height=logo.naturalHeight;const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(logo,0,0);doc.addImage(c.toDataURL('image/png'),'PNG',35,32,200,70,undefined,'FAST')}catch(err){console.warn('Brand logo skipped',err)}}doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setCharSpace(0);const returnLines=courierReturnLines();doc.text(returnLines[0],35,116);doc.text(returnLines[1],35,131);const layout=courierLayout(courierSelected.length),gridY=courierSelected.length===1?183:159;
+async function courierExport(){if(!courierSelected.length)return;const btn=courierEl('courierExport');btn.disabled=true;try{if(!window.jspdf?.jsPDF)throw Error('PDF library is not loaded. Reload while connected to the internet.');const doc=new window.jspdf.jsPDF({orientation:'landscape',unit:'pt',format:[792,396],compress:true});const neoFontReady=await courierSetPdfFont(doc);doc.setDrawColor(35);doc.setLineWidth(1.3);doc.rect(12,12,768,372);const logo=courierEl('courierBlastLogo');if(logo?.complete&&logo.naturalWidth){try{const c=document.createElement('canvas');c.width=logo.naturalWidth;c.height=logo.naturalHeight;const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(logo,0,0);doc.addImage(c.toDataURL('image/png'),'PNG',35,32,200,70,undefined,'FAST')}catch(err){console.warn('Brand logo skipped',err)}}doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setCharSpace(0);const returnLines=courierReturnLines();doc.text(returnLines[0],35,116);doc.text(returnLines[1],35,131);const layout=courierLayout(courierSelected.length),gridY=159;
 for(let i=0;i<courierSelected.length;i++){
  const e=courierSelected[i],x=35+(i%layout.cols)*(layout.width+layout.gapX),y=gridY+Math.floor(i/layout.cols)*(layout.height+layout.gapY);
- if(y+layout.height>335)break;
+ // All selected artwork must print; never silently drop the final row.
  doc.setDrawColor(130);doc.setLineWidth(.5);doc.rect(x,y,layout.width,layout.height);
- if(e.courierImage){try{courierFitImage(doc,e.courierImage,x+3,y+3,layout.width-6,layout.height-6)}catch(err){doc.setFontSize(7);doc.text(e.name.slice(0,40),x+4,y+layout.height/2,{maxWidth:layout.width-8})}}
+ if(e.courierImage){try{courierFitImage(doc,e.courierImage,x+1,y+1,layout.width-2,layout.height-2)}catch(err){doc.setFontSize(7);doc.text(e.name.slice(0,40),x+4,y+layout.height/2,{maxWidth:layout.width-8})}}
  else{doc.setFontSize(7);doc.text(e.name.slice(0,40),x+4,y+layout.height/2,{maxWidth:layout.width-8})}
 }
 doc.setFont('NeoSansCourier','bold');doc.setFontSize(15);doc.setCharSpace(1.4);doc.text('CONTENTS: ( '+courierTotal()+' ) RINKBOARDS',35,355);doc.setFont('NeoSansCourier','bold');doc.setFontSize(13);doc.setCharSpace(3.0);const lines=courierText().split('\n');let y=66;for(const line of lines){if(line){const wrapped=doc.splitTextToSize(line,305);for(const part of wrapped){doc.text(part,460,y);y+=24}}else y+=22}const date=new Date().toISOString().slice(0,10);const team=courierSelected.every(e=>e.team===courierSelected[0].team)?courierSelected[0].team:'MixedTeams';const name=(team+'_CourierLabel_'+date).replace(/[^a-z0-9_-]/gi,'');doc.save(name+'.pdf');courierEl('courierStatus').textContent='Courier label downloaded.'}catch(e){courierEl('courierStatus').textContent=e.message||String(e)}finally{btn.disabled=false}}
