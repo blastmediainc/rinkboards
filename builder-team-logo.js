@@ -3,8 +3,7 @@
 const teamSelect=document.getElementById('builderTeam');
 const display=document.getElementById('builderTeamLogo');
 const image=document.getElementById('builderTeamLogoImage');
-const caption=document.getElementById('builderTeamLogoCaption');
-if(!teamSelect||!display||!image||!caption)return;
+if(!teamSelect||!display||!image)return;
 let current='',request=0;
 const bundled={'buffalo sabres':'buffalo-sabres.png','los angeles kings':'los-angeles-kings.png','university of wisconsin badgers':'wisconsin-badgers.png','vancouver warriors':'vancouver-warriors.png'};
 const normalize=t=>String(t||'').trim().toLowerCase();
@@ -17,9 +16,8 @@ async function pdfImage(data){
 }
 async function refresh(){
  const team=teamSelect.value.trim();if(team===current)return;current=team;const token=++request;
- image.removeAttribute('src');image.hidden=true;caption.textContent='';display.hidden=!team||team==='__add__'||/^league[ -]?wide$/i.test(team);
- if(display.hidden)return;
- caption.textContent=team;
+ image.removeAttribute('src');image.hidden=true;display.hidden=true;const skip=!team||team==='__add__'||/^league[ -]?wide$/i.test(team);
+ if(skip)return;
  let source=null;
  const api=window.RinkboardBandDropbox;
  if(api&&typeof api.downloadLogo==='function'){
@@ -29,9 +27,9 @@ async function refresh(){
  }
  if(!source)source=bundled[normalize(team)]||null;
  if(token!==request)return;
- if(!source){caption.textContent=team+' · No team logo uploaded';return}
- image.onload=()=>{if(token===request){image.hidden=false;caption.textContent=team}};
- image.onerror=()=>{if(token===request){image.hidden=true;caption.textContent=team+' · Logo unavailable'}};
+ if(!source)return
+ image.onload=()=>{if(token===request){image.hidden=false;display.hidden=false}};
+ image.onerror=()=>{if(token===request){image.hidden=true;display.hidden=true}};
  image.src=source;
 }
 teamSelect.addEventListener('change',refresh);
