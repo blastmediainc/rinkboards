@@ -491,7 +491,7 @@ async function rebuildSelectedPreviews(){
     await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
     const svg=bridge.getBoardPreview(0);
     if(typeof svg!=='string'||!svg.includes('<svg'))throw Error('Generated preview is empty');
-    const previewPath=record.path.replace(/\\.rinkboard\\.json$/i,'.preview.svg');
+    const previewPath=record.path.replace(/\.rinkboard\.json$/i,'.preview.svg');
     await upload(previewPath,svg,null,true);
     hoverPreviewCache.delete(previewPath);
     ok++;
@@ -616,6 +616,77 @@ $('dbBulkFile').addEventListener('change',async e=>{const file=e.target.files[0]
 $('dbBulkMatch').onclick=bulkMatch;
 $('dbBulkApply').onclick=bulkApply;
 $('dbBulkExport').onclick=()=>{bulkEl('dbBulkOverlay').hidden=true;$('dbExportProof').checked=true;perform(exportSelected)};
+
+
+// V143: explicit, scoped recovery. Never write while scanning.
+let recoveryRows=[],recoveryScanning=false;
+function recoveryStatus(msg){const el=$('dbRecoveryStatus');if(el)el.textContent=msg}
+function recoveryUI(){return $('dbRecoveryOverlay')}
+function recoveryValid(raw,record){try{parseSavedProject(raw,record);return true}catch{return false}}
+function recoveryDraw(){
+ const tbody=$('dbRecoveryRows');tbody.replaceChildren();
+ for(const r of recoveryRows){const tr=document.createElement('tr');
+  const check=document.createElement('input');check.type='checkbox';check.checked=!!r.validRev;check.disabled=!r.validRev;check.dataset.path=r.path;
+  const td0=document.createElement('td');td0.append(check);
+  for(const value of [r.season+' / '+r.name,r.currentState,r.validRev?'Recoverable: '+new Date(r.validDate).toLocaleString():'No valid previous version found']){const td=document.createElement('td');td.textContent=value;tr.append(td)}
+  tr.prepend(td0);tbody.append(tr);
+ }
+ $('dbRecoveryRestore').disabled=!recoveryRows.some(r=>r.validRev);
+}
+async function recoveryScan(){
+ if(activeBrand!=='nhl')throw Error('Switch to NHL mode before running Canucks recovery.');
+ if(expired())throw Error('Connect Dropbox before scanning.');
+ if(recoveryScanning) return;
+ recoveryScanning=true;recoveryRows=[];$('dbRecoveryRows').replaceChildren();$('dbRecoveryRestore').disabled=true;
+ try{
+  const root=base()+'/Vancouver Canucks';let listing;
+  try{listing=await rpc('/files/list_folder',{path:root,recursive:true,limit:2000})}catch(e){if(String(e).includes('not_found'))throw Error('No Vancouver Canucks folder found under '+base());throw e}
+  const files=[];while(true){files.push(...listing.entries.filter(e=>e['.tag']==='file'&&/\.rinkboard\.json$/i.test(e.name)));if(!listing.has_more)break;listing=await rpc('/files/list_folder/continue',{cursor:listing.cursor})}
+  files.sort((a,b)=>(a.path_display||'').localeCompare(b.path_display||''));
+  let scanned=0,corrupt=0,recoverable=0;
+  for(const f of files){
+   const path=f.path_display||f.path_lower;
+   if(!path.toLowerCase().startsWith((root+'/').toLowerCase()))continue;
+   const rel=path.slice(root.length+1).split('/');
+   const r={path,rev:f.rev,season:rel[0]||'Unknown',name:f.name,currentState:'',validRev:null,validDate:null};
+   try{const raw=await download(path);if(recoveryValid(raw,r)){r.currentState='Valid JSON — no recovery needed';scanned++;recoveryStatus('Scanned '+scanned+'/'+files.length+'…');continue}r.currentState='Corrupted JSON / SVG';corrupt++}
+   catch(e){r.currentState='Cannot read current file: '+String(e.message).slice(0,95);corrupt++}
+   try{
+    let revs=await rpc('/files/list_revisions',{path,limit:100,mode:'path'});
+    for(const v of revs.entries||[]){if(v.rev===f.rev)continue;
+     try{const old=await download('rev:'+v.rev);if(recoveryValid(old,r)){r.validRev=v.rev;r.validDate=v.server_modified;recoverable++;break}}catch{}
+    }
+   }catch(e){r.currentState+=' (history error: '+String(e.message).slice(0,100)+')'}
+   recoveryRows.push(r);scanned++;recoveryStatus('Scanned '+scanned+'/'+files.length+'… '+corrupt+' affected, '+recoverable+' recoverable.');
+  }
+  recoveryDraw();recoveryStatus('Scan complete. '+files.length+' project files checked; '+corrupt+' affected; '+recoverable+' recoverable. Review the list and select files to restore. No files have been changed.');
+ }finally{recoveryScanning=false}
+}
+async function recoveryRestore(){
+ if(activeBrand!=='nhl')throw Error('Switch to NHL mode before restoring.');
+ const paths=new Set([...$('dbRecoveryRows').querySelectorAll('input[type="checkbox"]:checked')].map(el=>el.dataset.path));
+ const chosen=recoveryRows.filter(r=>paths.has(r.path)&&r.validRev);
+ if(!chosen.length)throw Error('Select at least one recoverable file.');
+ if(!confirm('Restore '+chosen.length+' Vancouver Canucks project(s) from verified JSON revisions? This will update Dropbox files. Continue?'))return;
+ $('dbRecoveryRestore').disabled=true;let ok=0,failed=0;
+ for(const r of chosen){
+  try{
+   const meta=await rpc('/files/get_metadata',{path:r.path});
+   if(meta.rev!==r.rev)throw Error('Changed since scan — skipped');
+   const valid=await download('rev:'+r.validRev);
+   if(!recoveryValid(valid,r))throw Error('Previous version is no longer valid JSON');
+   // Upload with revision precondition; unlike /files/restore this refuses concurrent edits.
+   await upload(r.path,valid,r.rev);
+   r.currentState='Restored valid JSON';r.validRev=null;ok++;
+  }catch(e){r.currentState='FAILED: '+String(e.message).slice(0,130);failed++}
+  recoveryDraw();recoveryStatus('Restoring… '+ok+' restored, '+failed+' failed of '+chosen.length+'.');
+ }
+ recoveryStatus('Restore complete: '+ok+' restored, '+failed+' failed. Refresh the database, confirm the projects open, then regenerate previews.');
+}
+$('dbRecoveryOpen').onclick=()=>{recoveryUI().hidden=false;recoveryStatus('Ready. Scan only reads files and history.');};
+$('dbRecoveryClose').onclick=()=>recoveryUI().hidden=true;
+$('dbRecoveryScan').onclick=()=>perform(recoveryScan);
+$('dbRecoveryRestore').onclick=()=>perform(recoveryRestore);
 
 updateLeagueControl();$('databaseOpen').onclick=()=>{$('dbOverlay').hidden=false;if(!expired()&&!entries.length)perform(refresh)};$('dbClose').onclick=()=>{$('dbOverlay').hidden=true};$('dbOverlay').addEventListener('click',e=>{if(e.target===$('dbOverlay'))$('dbOverlay').hidden=true});$('dbAppKey').value=config.appKey;$('dbFolder').value=config.folder;$('dbApply').onclick=applyConfig;$('dbConnect').onclick=()=>perform(login);$('dbRefresh').onclick=()=>perform(refresh);$('dbRebuildPreviews').onclick=()=>perform(rebuildSelectedPreviews);$('dbSave').onclick=()=>perform(saveCurrent);$('dbSaveAll').onclick=()=>perform(saveAll);$('dbGroupSave').onclick=groupSave;$('dbGroupLoad').onclick=groupLoad;$('dbGroupDelete').onclick=groupDelete;groupRender();
  $('dbGroupTeam')?.addEventListener('change',()=>{$('dbGroupSeason').value='';groupScopeOptions();groupRender()});
