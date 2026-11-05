@@ -102,6 +102,15 @@ async function loadTeamLogo(){
   const blob=await response.blob();logoData=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(blob)});
   logoFormat='png';status('Loaded bundled Vancouver Warriors logo');await render();return;
  }
+ // V156: BCHL logo bundle, after Dropbox team-logo override.
+ const bchlLogo=window.RinkboardBCHLLogos?.[String(t).toLowerCase().replace(/[^a-z0-9]/g,'')];
+ if(bchlLogo){
+  const response=await fetch(bchlLogo);
+  if(!response.ok)throw Error('Bundled BCHL team logo could not be loaded');
+  const blob=await response.blob();
+  logoData=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(blob)});
+  logoFormat='png';status('Loaded bundled BCHL team logo');await render();return;
+ }
  status('No logo found for '+t+'. Upload a PNG, SVG, PDF, or WEBP to add one.');await render();
 }
 async function open(from){source=from;selectedRecord=null;selectedBatch=[];logoData='';logoFormat='';boardData='';boardSvg='';if(from==='builder'){team=$('builderTeam')?.value||'';season=$('builderSeason')?.value||''}else{const records=api().selectedRecords();if(!records.length){alert('Select one or more rinkboards in the Database to generate bands.');return}selectedBatch=records;selectedRecord=records[0];team=($('dbTeam')?.value||'').trim();if(!team||isLeagueWide(team))team=isLeagueWide(selectedRecord.team)?'':selectedRecord.team;season=selectedRecord.season}

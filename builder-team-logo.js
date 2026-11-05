@@ -25,7 +25,7 @@ async function refresh(){
    try{const data=await api.downloadLogo(safeName(team)+'.'+ext);if(token!==request)return;source=ext==='pdf'?await pdfImage(data):data;if(source)break}catch(e){if(token!==request)return;}
   }
  }
- if(!source)source=bundled[normalize(team)]||null;
+ if(!source)source=(window.RinkboardBCHLLogos||{})[safeName(team).toLowerCase()]||bundled[normalize(team)]||null;
  if(token!==request)return;
  if(!source)return
  image.onload=()=>{if(token===request){image.hidden=false;display.hidden=false}};
