@@ -739,26 +739,34 @@ async function courierSetPdfFont(doc){
 }
 function courierUpdate(){courierEl('courierShip').textContent=courierText();courierEl('courierContents').textContent='CONTENTS: ( '+courierTotal()+' ) RINKBOARDS'}
 function courierSvgToPng(svg){
-  // Render the complete Dropbox preview SVG, preserving its original viewBox,
-  // including whitespace and background. Do not trim pixels or crop to content.
+  // Render the saved preview as one complete, immutable board image.
+  // The exact same bitmap is used in the label preview and exported PDF.
   return new Promise((resolve,reject)=>{
-    const blob=new Blob([svg],{type:'image/svg+xml;charset=utf-8'});
-    const url=URL.createObjectURL(blob);
+    const xml=new DOMParser().parseFromString(svg,'image/svg+xml');
+    const root=xml.documentElement;
+    if(root.localName!=='svg'||xml.querySelector('parsererror')){reject(Error('Invalid rinkboard preview SVG'));return}
+    const vb=(root.getAttribute('viewBox')||'').trim().split(/[\s,]+/).map(Number);
+    const numeric=v=>{const n=parseFloat(v||'');return Number.isFinite(n)&&n>0?n:0};
+    const boardW=vb.length===4&&vb.every(Number.isFinite)&&vb[2]>0?vb[2]:numeric(root.getAttribute('width'));
+    const boardH=vb.length===4&&vb.every(Number.isFinite)&&vb[3]>0?vb[3]:numeric(root.getAttribute('height'));
+    if(!boardW||!boardH){reject(Error('Saved rinkboard preview has no dimensions'));return}
+    const pxW=Math.min(3200,Math.max(900,Math.round(boardW)));
+    const pxH=Math.max(1,Math.round(pxW*boardH/boardW));
+    // Preserve all saved SVG artwork and transforms; only provide intrinsic
+    // viewport dimensions if the file omitted them.
+    const source=new Blob([svg],{type:'image/svg+xml;charset=utf-8'});
+    const url=URL.createObjectURL(source);
     const img=new Image();
     img.onload=()=>{
       try{
-        const iw=img.naturalWidth||1470,ih=img.naturalHeight||300;
-        const ratio=Math.min(1,2400/Math.max(iw,ih));
-        const canvas=document.createElement('canvas');
-        canvas.width=Math.max(1,Math.round(iw*ratio));
-        canvas.height=Math.max(1,Math.round(ih*ratio));
-        const ctx=canvas.getContext('2d');
-        ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
-        ctx.drawImage(img,0,0,canvas.width,canvas.height);
+        const canvas=document.createElement('canvas');canvas.width=pxW;canvas.height=pxH;
+        const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,pxW,pxH);
+        // Draw the whole SVG image once, with its own native composition.
+        ctx.drawImage(img,0,0,pxW,pxH);
         resolve(canvas.toDataURL('image/png'));
-      }catch(e){reject(e)}finally{URL.revokeObjectURL(url)}
+      }catch(err){reject(err)}finally{URL.revokeObjectURL(url)}
     };
-    img.onerror=()=>{URL.revokeObjectURL(url);reject(Error('Preview SVG could not be rendered'))};
+    img.onerror=()=>{URL.revokeObjectURL(url);reject(Error('Saved rinkboard preview could not be rendered'))};
     img.src=url;
   });
 }
