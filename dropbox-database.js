@@ -705,13 +705,14 @@ function courierItems(){return entries.filter(e=>selectedPaths.has(e.path)).map(
 function courierTotal(){return courierSelected.reduce((sum,e)=>sum+e.qty,0)}
 // Layout is based on distinct artwork count, never the sum of printed quantities.
 function courierLayout(count){
-  // Match the builder's preview grid, including every selected design.
-  // The printable artwork region is x=35..433, y=159..335.
+  // Rinkboards must keep their true 132:30 (4.4:1) proportions.
+  // Never stretch a board to fill the available vertical grid space.
   const cols=count===1?1:count<=4?2:4;
   const rows=Math.ceil(count/cols);
-  const gapX=cols===1?0:7, gapY=rows===1?0:5;
+  const gapX=cols===1?0:7;
   const width=cols===1?398:(398-(cols-1)*gapX)/cols;
-  const height=Math.max(1,(176-(rows-1)*gapY)/rows);
+  const height=width*(30/132);
+  const gapY=rows>1?Math.min(9,Math.max(2,(176-rows*height)/(rows-1))):0;
   return {cols,width,height,gapX,gapY};
 }
 function courierFitImage(doc,data,x,y,w,h){
