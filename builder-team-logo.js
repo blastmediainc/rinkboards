@@ -23,21 +23,41 @@ function show(source,token){
  image.src=source;
  if(image.complete&&image.naturalWidth)image.onload();
 }
+const pwhlNames={
+ 'boston fleet':['BostonFleet','Boston_Fleet','Fleet'],
+ 'minnesota frost':['MinnesotaFrost','Minnesota_Frost','Frost'],
+ 'montreal victoire':['MontrealVictoire','MontréalVictoire','Montreal_Victoire','Victoire'],
+ 'new york sirens':['NewYorkSirens','New_York_Sirens','Sirens'],
+ 'ottawa charge':['OttawaCharge','Ottawa_Charge','Charge'],
+ 'toronto sceptres':['TorontoSceptres','Toronto_Sceptres','Sceptres'],
+ 'vancouver goldeneyes':['VancouverGoldeneyes','Vancouver_Goldeneyes','Goldeneyes'],
+ 'seattle torrent':['SeattleTorrent','Seattle_Torrent','Torrent'],
+ 'pwhl detroit':['PWHLDetroit','Detroit'],
+ 'pwhl hamilton':['PWHLHamilton','Hamilton'],
+ 'pwhl las vegas':['PWHLLasVegas','LasVegas'],
+ 'pwhl san jose':['PWHLSanJose','SanJose']
+};
+function logoCandidates(team){
+ const original=String(team||'').trim();
+ const ascii=original.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+ const names=[safeName(original),safeName(ascii),ascii.replace(/\s+/g,'_'),ascii.replace(/\s+/g,'-'),original,ascii,...(pwhlNames[normalize(ascii)]||[])];
+ return [...new Set(names.filter(Boolean))];
+}
 async function loadLogo(team){
  const key=normalize(team),local=(window.RinkboardBCHLLogos||{})[safeName(team).toLowerCase()]||bundled[key]||(/wisconsin.*badgers|badgers.*wisconsin/.test(key)?'wisconsin-badgers.png':null)||(/vancouver.*warriors/.test(key)?'vancouver-warriors.png':null);
- // Bundled assets render without waiting for Dropbox requests.
  if(local)return local;
  const api=window.RinkboardBandDropbox;
  if(!api||typeof api.downloadLogo!=='function')return null;
- // Request all possible formats concurrently, but preserve SVG > PNG > WEBP > PDF preference.
- const extensions=['svg','png','webp','pdf'];
- const results=await Promise.all(extensions.map(ext=>api.downloadLogo(safeName(team)+'.'+ext).catch(()=>null)));
- for(let i=0;i<results.length;i++){
-  if(!results[i])continue;
-  if(extensions[i]==='pdf'){
-   try{return await pdfImage(results[i])}catch(e){continue}
-  }
-  return results[i];
+ // PWHL files may use accented/unaccented, spaced, underscored or shortened names.
+ // Check common spellings in parallel; keep SVG and other vector assets preferred.
+ const names=logoCandidates(team),exts=['svg','png','webp','pdf'];
+ const requests=[];
+ for(const name of names)for(const ext of exts)requests.push({name,ext});
+ // Avoid flooding Dropbox with requests when many logos are visible.
+ for(let i=0;i<requests.length;i+=8){
+  const batch=requests.slice(i,i+8);
+  const results=await Promise.all(batch.map(async r=>({ext:r.ext,data:await api.downloadLogo(r.name+'.'+r.ext).catch(()=>null)})));
+  for(const r of results){if(!r.data)continue;if(r.ext==='pdf'){try{return await pdfImage(r.data)}catch(e){continue}}return r.data;}
  }
  return null;
 }
