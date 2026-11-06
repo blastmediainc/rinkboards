@@ -161,12 +161,14 @@ async function loadFolderChoices(){folderChoices={teams:new Set(),seasons:new Se
 function databaseTeamNames(){return [...new Set([...entries.map(e=>e.team),...folderChoices.teams])].filter(t=>t&&t!=='Team Logos'&&t!==LEAGUE_TEAM).sort((a,b)=>a.localeCompare(b));}
 function updateTeamStrip(){
  const strip=$('dbTeamLogoStrip');if(!strip)return;
- const teams=expired()?[]:databaseTeamNames();
+ const discovered=databaseTeamNames();
+ const snapshot=window.RinkboardLocalTeams?.[activeBrand]||[];
+ const teams=(expired()||!discovered.length)?snapshot:discovered;
  strip.hidden=!teams.length;strip.replaceChildren();
  for(const team of teams){
   const button=document.createElement('button');button.type='button';button.className='db-team-tile';button.title=team;button.setAttribute('aria-label','Select '+team);
   button.dataset.team=team;button.classList.toggle('active',$('builderTeam').value===team);
-  const img=document.createElement('img');img.alt='';img.loading='lazy';button.append(img);
+  const img=document.createElement('img');img.alt='';img.loading='eager';img.decoding='async';button.append(img);
   const logo=window.RinkboardTeamLogoLoader;
   if(logo){logo(team).then(src=>{if(src&&button.isConnected){img.src=src;button.classList.add('has-logo')}else button.remove()}).catch(()=>button.remove());}
   else button.remove();
@@ -180,6 +182,7 @@ function updateTeamStrip(){
   strip.append(button);
  }
 }
+window.RinkboardRefreshTeamStrip=updateTeamStrip;
 function builderChoices(){
  const teamEl=$('builderTeam'),seasonEl=$('builderSeason');
  const selectedTeam=teamEl.value,selectedSeason=seasonEl.value;

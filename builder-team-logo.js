@@ -44,6 +44,13 @@ function logoCandidates(team){
  return [...new Set(names.filter(Boolean))];
 }
 async function loadLogo(team){
+ const league=document.getElementById('brandModeSelect')?.value||'nhl';
+ const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/gi,'').toLowerCase();
+ const localGroup=window.RinkboardLocalLogoFiles?.[league]||{};
+ const requested=norm(team);
+ for(const [teamName,filePath] of Object.entries(localGroup)){
+   if(norm(teamName)===requested)return filePath;
+ }
  const key=normalize(team),local=(window.RinkboardBCHLLogos||{})[safeName(team).toLowerCase()]||bundled[key]||(/wisconsin.*badgers|badgers.*wisconsin/.test(key)?'wisconsin-badgers.png':null)||(/vancouver.*warriors/.test(key)?'vancouver-warriors.png':null);
  if(local)return local;
  const api=window.RinkboardBandDropbox;
@@ -67,7 +74,7 @@ function refresh(){
  const team=teamSelect.value.trim();if(team===current)return;current=team;const token=++request;
  image.onload=null;image.onerror=null;hide();
  if(!team||team==='__add__'||/^league[ -]?wide$/i.test(team))return;
- const key=normalize(team);
+ const key=(document.getElementById('brandModeSelect')?.value||'nhl')+'/'+normalize(team);
  if(!cache.has(key))cache.set(key,loadLogo(team).catch(()=>null));
  cache.get(key).then(source=>show(source,token));
 }
