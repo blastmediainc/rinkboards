@@ -41,6 +41,7 @@ async function loadLogo(team){
  }
  return null;
 }
+window.RinkboardTeamLogoLoader=loadLogo;
 function refresh(){
  if(awaitingTeamSelection)return;
  const team=teamSelect.value.trim();if(team===current)return;current=team;const token=++request;

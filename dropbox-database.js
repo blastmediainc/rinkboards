@@ -157,6 +157,29 @@ async function listAll(){let result=[];let first=await rpc('/files/list_folder',
 function parseEntry(meta){let path=meta.path_display||meta.path_lower||'',prefix=base()+'/';if(!path.toLowerCase().startsWith(prefix.toLowerCase()))return null;let parts=path.slice(prefix.length).split('/');if(parts.length!==4)return null;let [team,season,size,name]=parts;let width=size.match(/^30x(.+)$/i)?.[1];if(!width)return null;return {team,season,size,width,name:name.replace(/\.rinkboard\.json$/i,''),path,rev:meta.rev,id:meta.id}}
 async function addCategory(id){const previous=id==='dbTeam'?'':id==='dbSeason'?'': 'all';const team=$('dbTeam').value,season=$('dbSeason').value;const type=id==='dbTeam'||id==='builderTeam'?'team':id==='dbSeason'||id==='builderSeason'?'season':'size';if(type==='season'&&(!team||team==='__add__')||type==='size'&&(!team||!season)){message('Select a team'+(type==='size'?' and season':'')+' first.');$(id).value=previous;return}const raw=prompt(type==='size'?'Enter board width in inches (height is 30 inches):':'Enter new '+type+' name:');if(raw===null){render();return}let name=raw.trim();if(type==='size'){const width=Number(name.replace(/[^0-9.]/g,''));if(!Number.isFinite(width)||width<=0){message('Enter a valid board width.');render();return}name='30x'+String(width)}else if(!name||name==='.'||name==='..'||/[\\/:*?"<>|]/.test(name)){message('Enter a valid '+type+' name without slashes or special filename characters.');render();return}if(expired()){message('Connect Dropbox before adding a '+type+'.');render();return}const folder=type==='team'?base()+'/'+name:type==='season'?base()+'/'+team+'/'+name:base()+'/'+team+'/'+season+'/'+name;await ensureFolders(folder);if(type==='team')folderChoices.teams.add(name);else if(type==='season')folderChoices.seasons.add(team+'/'+name);else folderChoices.sizes.add(team+'/'+season+'/'+name);if(type==='team'){$('dbTeam').innerHTML='';const o=document.createElement('option');o.value=name;$('dbTeam').append(o);$('dbTeam').value=name}else if(type==='season'){$('dbSeason').innerHTML='';const o=document.createElement('option');o.value=name;$('dbSeason').append(o);$('dbSeason').value=name}else{$('dbSize').innerHTML='';const o=document.createElement('option');o.value=name;$('dbSize').append(o);$('dbSize').value=name}render();message('Created '+type+' '+name+' in Dropbox. You can now save artboards here.')}
 async function loadFolderChoices(){folderChoices={teams:new Set(),seasons:new Set(),sizes:new Set()};let result;try{result=await rpc('/files/list_folder',{path:base(),recursive:true,limit:2000})}catch(e){if(String(e).includes('not_found'))return;throw e}let items=[...result.entries];while(result.has_more){result=await rpc('/files/list_folder/continue',{cursor:result.cursor});items.push(...result.entries)}for(const item of items){if(item['.tag']!=='folder')continue;const path=item.path_display||item.path_lower||'';if(!path.toLowerCase().startsWith((base()+'/').toLowerCase()))continue;const parts=path.slice(base().length+1).split('/');if(parts.length===1)folderChoices.teams.add(parts[0]);if(parts.length===2)folderChoices.seasons.add(parts.join('/'));if(parts.length===3&&/^30x/i.test(parts[2]))folderChoices.sizes.add(parts.join('/'))}}
+// V163 — visual selector: ONLY teams actually present in this league's Dropbox folders/projects.
+function databaseTeamNames(){return [...new Set([...entries.map(e=>e.team),...folderChoices.teams])].filter(t=>t&&t!=='Team Logos'&&t!==LEAGUE_TEAM).sort((a,b)=>a.localeCompare(b));}
+function updateTeamStrip(){
+ const strip=$('dbTeamLogoStrip');if(!strip)return;
+ const teams=expired()?[]:databaseTeamNames();
+ strip.hidden=!teams.length;strip.replaceChildren();
+ for(const team of teams){
+  const button=document.createElement('button');button.type='button';button.className='db-team-tile';button.title=team;button.setAttribute('aria-label','Select '+team);
+  button.dataset.team=team;button.classList.toggle('active',$('builderTeam').value===team);
+  const img=document.createElement('img');img.alt='';img.loading='lazy';button.append(img);
+  const logo=window.RinkboardTeamLogoLoader;
+  if(logo){logo(team).then(src=>{if(src&&button.isConnected){img.src=src;button.classList.add('has-logo')}else button.remove()}).catch(()=>button.remove());}
+  else button.remove();
+  button.onclick=()=>{
+   if($('builderTeam').value===team)return;
+   if(!confirm('Switch to '+team+'? Save any unsaved artwork first.'))return;
+   $('builderTeam').value=team;$('builderTeam').dispatchEvent(new Event('change',{bubbles:true}));
+   $('dbTeam').value=team;$('dbSeason').value='';$('dbSize').value='all';render();groupRender();
+   updateTeamStrip();
+  };
+  strip.append(button);
+ }
+}
 function builderChoices(){
  const teamEl=$('builderTeam'),seasonEl=$('builderSeason');
  const selectedTeam=teamEl.value,selectedSeason=seasonEl.value;
@@ -165,6 +188,7 @@ function builderChoices(){
  const team=teamEl.value;
  const seasons=team?[...new Set([...entries.filter(e=>inTeam(e,team)).map(e=>e.season),...[...folderChoices.seasons].filter(x=>x.startsWith(team+'/')).map(x=>x.slice(team.length+1))])].sort((a,b)=>a.localeCompare(b)):[];
  setOptions('builderSeason',seasons,selectedSeason,'','Select season…');
+ updateTeamStrip();
 }
 function syncBuilderProjectSeason(){
  const team=$('builderTeam').value.trim(),season=$('builderSeason').value.trim();
@@ -504,7 +528,7 @@ async function rebuildSelectedPreviews(){
  message('Refreshed '+ok+' / '+targets.length+' selected previews.'+(failed.length?' Failed: '+failed.slice(0,3).join('; ')+(failed.length>3?' (+'+(failed.length-3)+' more; see browser console)':''):''));
 }
 
-async function openRecord(record){let data=parseSavedProject(await download(record.path),record);if(!data.project||!Array.isArray(data.project.boards))throw Error('This is not a valid Rinkboard Builder database entry');if(!confirm(`Open ${record.name} in the editor? Unsaved edits in the current project will be lost.`))return;window.RinkboardBridge.openProject(data.project);selectedRecord=record;if($('dbLeagueWide'))$('dbLeagueWide').checked=isLeague(record);if(!isLeague(record)){$('dbTeam').value=record.team;$('dbSeason').value=record.season;}builderChoices();if(!isLeague(record)){$('builderTeam').value=record.team;builderChoices();}$('builderSeason').value=record.season;syncBuilderProjectSeason();$('dbOverlay').hidden=true;message(`Opened ${record.name}. Save Current Artboard to update it in Dropbox.`)}
+async function openRecord(record){let data=parseSavedProject(await download(record.path),record);if(!data.project||!Array.isArray(data.project.boards))throw Error('This is not a valid Rinkboard Builder database entry');if(!confirm(`Open ${record.name} in the editor? Unsaved edits in the current project will be lost.`))return;window.RinkboardBridge.openProject(data.project);selectedRecord=record;if($('dbLeagueWide'))$('dbLeagueWide').checked=isLeague(record);if(!isLeague(record)){$('dbTeam').value=record.team;$('dbSeason').value=record.season;}builderChoices();if(!isLeague(record)){$('builderTeam').value=record.team;builderChoices();}$('builderSeason').value=record.season;syncBuilderProjectSeason();updateTeamStrip();$('dbOverlay').hidden=true;message(`Opened ${record.name}. Save Current Artboard to update it in Dropbox.`)}
 // V134 — explicit, non-destructive Dropbox league migration. Originals stay until user verifies.
 async function migrateLegacyLeagueFolders(){
  if(expired())throw Error('Connect Dropbox before migrating.');
@@ -542,7 +566,7 @@ window.RinkboardBandDropbox={
 window.addEventListener('rinkboard-brand-changed',event=>perform(()=>switchDatabaseBrand(event.detail.brand)));
 window.addEventListener('rinkboard-ncaa-division-changed',()=>{if(activeBrand==='ncaa')perform(async()=>{config.folder=brandRoot();$('dbFolder').value=config.folder;entries=[];selectedRecord=null;selectedPaths.clear();exportQuantities.clear();folderChoices={teams:new Set(),seasons:new Set(),sizes:new Set()};$('dbTeam').value='';$('dbSeason').value='';$('builderTeam').value='';$('builderSeason').value='';builderChoices();render();groupRender();if(!expired())await refresh();});});
 $('builderDbSave').onclick=()=>perform(builderSave);
-$('builderTeam').addEventListener('change',()=>{if($('builderTeam').value==='__add__'){perform(()=>builderAddCategory('team'));return}$('builderSeason').value='';builderChoices();syncBuilderProjectSeason()});
+$('builderTeam').addEventListener('change',()=>{if($('builderTeam').value==='__add__'){perform(()=>builderAddCategory('team'));return}$('builderSeason').value='';builderChoices();syncBuilderProjectSeason();updateTeamStrip()});
 // Handle the native dropdown directly, without the global busy gate. The menu's
 // '+ Add New Season / Year...' option must open the prompt on selection.
 let addingBuilderSeason=false;
