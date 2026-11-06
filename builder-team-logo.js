@@ -6,7 +6,7 @@ const image=document.getElementById('builderTeamLogoImage');
 if(!teamSelect||!display||!image)return;
 let current='',request=0,awaitingTeamSelection=false;
 const cache=new Map();
-const bundled={'buffalo sabres':'buffalo-sabres.png','los angeles kings':'los-angeles-kings.png','university of wisconsin badgers':'wisconsin-badgers.png','vancouver warriors':'vancouver-warriors.png'};
+const bundled={'buffalo sabres':'buffalo-sabres.png','los angeles kings':'los-angeles-kings.png','university of wisconsin badgers':'wisconsin-badgers.png','wisconsin badgers':'wisconsin-badgers.png','vancouver warriors':'vancouver-warriors.png'};
 const normalize=t=>String(t||'').trim().toLowerCase();
 const safeName=t=>String(t||'').replace(/[^a-z0-9]/gi,'');
 async function pdfImage(data){
@@ -24,7 +24,7 @@ function show(source,token){
  if(image.complete&&image.naturalWidth)image.onload();
 }
 async function loadLogo(team){
- const key=normalize(team),local=(window.RinkboardBCHLLogos||{})[safeName(team).toLowerCase()]||bundled[key];
+ const key=normalize(team),local=(window.RinkboardBCHLLogos||{})[safeName(team).toLowerCase()]||bundled[key]||(/wisconsin.*badgers|badgers.*wisconsin/.test(key)?'wisconsin-badgers.png':null)||(/vancouver.*warriors/.test(key)?'vancouver-warriors.png':null);
  // Bundled assets render without waiting for Dropbox requests.
  if(local)return local;
  const api=window.RinkboardBandDropbox;
