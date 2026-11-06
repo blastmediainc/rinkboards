@@ -181,7 +181,7 @@ function updateTeamStrip(){
   else button.remove();
   button.onclick=()=>{
    if($('builderTeam').value===team)return;
-   if(!confirm('Switch to '+team+'? Save any unsaved artwork first.'))return;
+   if(window.RinkboardHasUnsavedArtwork?.() && !confirm('Switch to '+team+'? You have unsaved artwork. Continue without saving?'))return;
    $('builderTeam').value=team;$('builderTeam').dispatchEvent(new Event('change',{bubbles:true}));
    $('dbTeam').value=team;$('dbSeason').value='';$('dbSize').value='all';render();groupRender();
    updateTeamStrip();
@@ -236,6 +236,7 @@ async function builderSave(){
  syncBuilderProjectSeason();
  const project=window.RinkboardBridge.getProject();
  const name=await saveOne(project.activeBoard,ctx);
+ window.RinkboardMarkArtworkSaved?.();
  render();
  $('builderDbHint').textContent='Saved '+name.name+' to '+ctx.team+' / '+ctx.season+' in Dropbox. Production PDF not regenerated.';
  message('Saved '+name.name+' to '+ctx.team+' / '+ctx.season+'. Production PDF not regenerated.');
@@ -502,8 +503,8 @@ async function shareSelectedLeagueWide(){
  render();builderChoices();
  message('Saved '+done+' of '+operations.length+' selected rinkboards as League-Wide.'+(errors.length?' Failed: '+errors.join(' | '):' They are now available to all '+activeBrand.toUpperCase()+' teams in the corresponding seasons.'));
 }
-async function saveCurrent(){const ctx=context(),obj=window.RinkboardBridge.getProject(),result=await saveOne(obj.activeBoard,ctx);render();message(`Saved ${result.name} to Dropbox. Production PDF not regenerated; export it separately when ready.`)}
-async function saveAll(){const ctx=context(),obj=window.RinkboardBridge.getProject(),done=[];for(let i=0;i<obj.boards.length;i++)done.push(await saveOne(i,ctx));render();message(`Saved ${done.length} editable artboards to Dropbox. Production PDFs not regenerated; export separately when ready.`)}
+async function saveCurrent(){const ctx=context(),obj=window.RinkboardBridge.getProject(),result=await saveOne(obj.activeBoard,ctx);window.RinkboardMarkArtworkSaved?.();render();message(`Saved ${result.name} to Dropbox. Production PDF not regenerated; export it separately when ready.`)}
+async function saveAll(){const ctx=context(),obj=window.RinkboardBridge.getProject(),done=[];for(let i=0;i<obj.boards.length;i++)done.push(await saveOne(i,ctx));window.RinkboardMarkArtworkSaved?.();render();message(`Saved ${done.length} editable artboards to Dropbox. Production PDFs not regenerated; export separately when ready.`)}
 // V75: Repair all Dropbox previews from saved editable projects, without changing their JSON.
 async function rebuildSelectedPreviews(){
  if(expired())throw Error('Connect Dropbox before refreshing previews.');

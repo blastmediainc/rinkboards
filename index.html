@@ -1205,4 +1205,30 @@ const team=document.getElementById('builderTeam');if(team)new MutationObserver(u
 update();
 })();
 </script>
-</body></html>
+<script id="v172-unsaved-artwork-check">
+(function(){
+  let baseline=null;
+  const artwork=()=>{
+    const p=window.RinkboardBridge?.getProject?.();
+    return p ? JSON.stringify(p.boards.map(b=>b.layers||[])) : null;
+  };
+  window.RinkboardMarkArtworkSaved=()=>{baseline=artwork();};
+  window.RinkboardHasUnsavedArtwork=()=>{
+    const current=artwork();
+    return current!==null && baseline!==null && current!==baseline;
+  };
+  function init(){
+    if(!window.RinkboardBridge)return;
+    const bridge=window.RinkboardBridge;
+    const originalOpen=bridge.openProject;
+    bridge.openProject=function(...args){
+      const result=originalOpen.apply(this,args);
+      window.RinkboardMarkArtworkSaved();
+      return result;
+    };
+    window.RinkboardMarkArtworkSaved();
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
+  else init();
+})();
+</script></body></html>
