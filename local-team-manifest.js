@@ -4,8 +4,8 @@ window.RinkboardLocalLogoFiles={
   "Vancouver Canucks": "team-logos/nhl/VancouverCanucks.png",
   "Anaheim Ducks": "team-logos/nhl/AnaheimDucks.png",
   "San Jose Sharks": "team-logos/nhl/SanJoseSharks.png",
-  "Los Angeles Kings": "los-angeles-kings.png",
-  "Buffalo Sabres": "buffalo-sabres.png"
+  "Los Angeles Kings": "team-logos/nhl/LosAngelesKings.png",
+  "Buffalo Sabres": "team-logos/nhl/BuffaloSabres.png"
  },
  "pwhl": {
   "PWHL San Jose": "team-logos/pwhl/PWHLSanJose.png",

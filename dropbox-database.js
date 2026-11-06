@@ -166,27 +166,63 @@ async function addCategory(id){const previous=id==='dbTeam'?'':id==='dbSeason'?'
 async function loadFolderChoices(){folderChoices={teams:new Set(),seasons:new Set(),sizes:new Set()};let result;try{result=await rpc('/files/list_folder',{path:base(),recursive:true,limit:2000})}catch(e){if(String(e).includes('not_found'))return;throw e}let items=[...result.entries];while(result.has_more){result=await rpc('/files/list_folder/continue',{cursor:result.cursor});items.push(...result.entries)}for(const item of items){if(item['.tag']!=='folder')continue;const path=item.path_display||item.path_lower||'';if(!path.toLowerCase().startsWith((base()+'/').toLowerCase()))continue;const parts=path.slice(base().length+1).split('/');if(parts.length===1)folderChoices.teams.add(parts[0]);if(parts.length===2)folderChoices.seasons.add(parts.join('/'));if(parts.length===3&&/^30x/i.test(parts[2]))folderChoices.sizes.add(parts.join('/'))}}
 // V163 — visual selector: ONLY teams actually present in this league's Dropbox folders/projects.
 function databaseTeamNames(){return distinctTeams([...entries.map(e=>e.team),...folderChoices.teams].filter(t=>t&&t!=='Team Logos'&&t!==LEAGUE_TEAM));}
+// V177: stable, alphabetic, locally populated logo strip. Dropbox updates do not reorder it.
+let teamStripRenderedLeague='',teamStripRenderedNames='';
 function updateTeamStrip(){
  const strip=$('dbTeamLogoStrip');if(!strip)return;
- const discovered=databaseTeamNames();
+ const normalizeName=name=>String(name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/gi,'').toLowerCase();
+ const local=window.RinkboardLocalLogoFiles?.[activeBrand]||{};
  const snapshot=window.RinkboardLocalTeams?.[activeBrand]||[];
- const teams=(expired()||!discovered.length)?snapshot:discovered;
- strip.hidden=!teams.length;strip.replaceChildren();
+ const discovered=databaseTeamNames();
+ // Keep the same slots and order from the first paint onward; new Dropbox teams can
+ // join the end of the alphabetical list without asynchronous image-load reordering.
+ const all=[...snapshot,...discovered];
+ const byKey=new Map();
+ for(const name of all){
+   const canonical=canonicalTeam(name),key=normalizeName(canonical);
+   if(key&&!byKey.has(key))byKey.set(key,canonical);
+ }
+ const teams=[...byKey.values()].sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'}));
+ const signature=teams.map(normalizeName).join('|');
+ strip.hidden=!teams.length;
+ if(teamStripRenderedLeague===activeBrand&&teamStripRenderedNames===signature){
+   for(const button of strip.querySelectorAll('.db-team-tile')){
+     const active=normalizeName(button.dataset.team)===normalizeName($('builderTeam').value);
+     button.classList.toggle('active',active);
+     button.setAttribute('aria-pressed',String(active));
+   }
+   return;
+ }
+ teamStripRenderedLeague=activeBrand;teamStripRenderedNames=signature;
+ strip.replaceChildren();
  for(const team of teams){
-  const button=document.createElement('button');button.type='button';button.className='db-team-tile';button.title=team;button.setAttribute('aria-label','Select '+team);
-  button.dataset.team=team;button.classList.toggle('active',$('builderTeam').value===team);
-  const img=document.createElement('img');img.alt='';img.loading='eager';img.decoding='async';button.append(img);
-  const logo=window.RinkboardTeamLogoLoader;
-  if(logo){logo(team).then(src=>{if(src&&button.isConnected){img.src=src;button.classList.add('has-logo')}else button.remove()}).catch(()=>button.remove());}
-  else button.remove();
-  button.onclick=()=>{
-   if($('builderTeam').value===team)return;
-   if(window.RinkboardHasUnsavedArtwork?.() && !confirm('Switch to '+team+'? You have unsaved artwork. Continue without saving?'))return;
-   $('builderTeam').value=team;$('builderTeam').dispatchEvent(new Event('change',{bubbles:true}));
-   $('dbTeam').value=team;$('dbSeason').value='';$('dbSize').value='all';render();groupRender();
-   updateTeamStrip();
-  };
-  strip.append(button);
+   const button=document.createElement('button');
+   button.type='button';button.className='db-team-tile';button.title=team;
+   button.setAttribute('aria-label','Select '+team);
+   button.dataset.team=team;
+   const selected=normalizeName($('builderTeam').value)===normalizeName(team);
+   button.classList.toggle('active',selected);
+   button.setAttribute('aria-pressed',String(selected));
+   const img=document.createElement('img');
+   img.alt='';img.loading='eager';img.decoding='async';
+   // Set the bundled file immediately. No Dropbox round trip or promise
+   // completion order can change the tile's position.
+   const file=Object.entries(local).find(([name])=>normalizeName(name)===normalizeName(team))?.[1];
+   if(file){img.src=file;button.classList.add('has-logo');}
+   else if(window.RinkboardTeamLogoLoader){
+     window.RinkboardTeamLogoLoader(team).then(src=>{
+       if(src&&button.isConnected){img.src=src;button.classList.add('has-logo');}
+     }).catch(()=>{});
+   }
+   button.append(img);
+   button.onclick=()=>{
+     if(normalizeName($('builderTeam').value)===normalizeName(team))return;
+     if(window.RinkboardHasUnsavedArtwork?.() && !confirm('Switch to '+team+'? You have unsaved artwork. Continue without saving?'))return;
+     $('builderTeam').value=team;$('builderTeam').dispatchEvent(new Event('change',{bubbles:true}));
+     $('dbTeam').value=team;$('dbSeason').value='';$('dbSize').value='all';render();groupRender();
+     updateTeamStrip();
+   };
+   strip.append(button);
  }
 }
 window.RinkboardRefreshTeamStrip=updateTeamStrip;
