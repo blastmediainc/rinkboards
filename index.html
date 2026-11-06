@@ -1149,7 +1149,7 @@ ATTN:
 </script><script id="v157-nhl-team-colours">
 (function(){
  const colors={
- 'anaheim ducks':['#F47A38','#B9975B'],'boston bruins':['#FFB81C','#000000'],'buffalo sabres':['#003087','#FFB81C'],
+ 'anaheim ducks':['#F47A38','#B9975B'],'boston bruins':['#FFB81C','#000000'],
  'calgary flames':['#C8102E','#F1BE48'],'carolina hurricanes':['#CC0000','#000000'],'chicago blackhawks':['#CF0A2C','#000000'],
  'colorado avalanche':['#6F263D','#236192'],'columbus blue jackets':['#002654','#CE1126'],'dallas stars':['#006847','#8F8F8C'],
  'detroit red wings':['#CE1126','#FFFFFF'],'edmonton oilers':['#041E42','#FF4C00'],'florida panthers':['#041E42','#C8102E'],
@@ -1161,7 +1161,7 @@ ATTN:
  'toronto maple leafs':['#00205B','#FFFFFF'],'utah mammoth':['#010101','#69B3E7'],'utah hockey club':['#010101','#69B3E7'],
  'vancouver canucks':['#00205B','#00843D'],'vegas golden knights':['#B4975A','#333F42'],'washington capitals':['#041E42','#C8102E'],
  'winnipeg jets':['#041E42','#7B303E']};
- const aliases={'canucks':'vancouver canucks','sabres':'buffalo sabres','red wings':'detroit red wings','golden knights':'vegas golden knights','mammoth':'utah mammoth','utah':'utah mammoth','blues':'st louis blues'};
+ const aliases={'canucks':'vancouver canucks','red wings':'detroit red wings','golden knights':'vegas golden knights','mammoth':'utah mammoth','utah':'utah mammoth','blues':'st louis blues'};
  const normalize=s=>String(s||'').toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]+/g,' ').trim();
  function readable(hex){let v=hex.replace('#','');let a=[0,2,4].map(i=>parseInt(v.slice(i,i+2),16)/255).map(x=>x<=.04045?x/12.92:Math.pow((x+.055)/1.055,2.4));return a[0]*.2126+a[1]*.7152+a[2]*.0722>.36?'#17232d':'#ffffff'}
  function match(value){let n=normalize(value);if(colors[n])return colors[n];if(aliases[n])return colors[aliases[n]];for(let k in colors){if(n.includes(k))return colors[k]}return null}

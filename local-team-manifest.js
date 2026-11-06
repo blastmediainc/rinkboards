@@ -5,7 +5,7 @@ window.RinkboardLocalLogoFiles={
   "Anaheim Ducks": "team-logos/nhl/AnaheimDucks.png",
   "San Jose Sharks": "team-logos/nhl/SanJoseSharks.png",
   "Los Angeles Kings": "team-logos/nhl/LosAngelesKings.png",
-  "Buffalo Sabres": "team-logos/nhl/BuffaloSabres.png"
+
  },
  "pwhl": {
   "PWHL San Jose": "team-logos/pwhl/PWHLSanJose.png",
@@ -56,7 +56,7 @@ window.RinkboardLocalLogoFiles={
 window.RinkboardLocalTeams={
  "nhl": [
   "Anaheim Ducks",
-  "Buffalo Sabres",
+
   "Los Angeles Kings",
   "San Jose Sharks",
   "Vancouver Canucks"

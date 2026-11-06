@@ -69,14 +69,6 @@ async function loadTeamLogo(){
    await render();return;
   }catch(e){if(e.message!=='Team logo not found')throw e}
  }
- // V154: Buffalo Sabres supplied band logo; Dropbox team logo overrides it.
- if(/^buffalo sabres$/i.test(t)){
-  const response=await fetch('buffalo-sabres.png');
-  if(!response.ok)throw Error('Bundled Buffalo Sabres logo could not be loaded');
-  const blob=await response.blob();
-  logoData=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(blob)});
-  logoFormat='png';status('Loaded bundled Buffalo Sabres logo');await render();return;
- }
  // V132: Bundled Los Angeles Kings logo is available without a Dropbox upload.
  // A user-uploaded Dropbox logo always takes priority over this default.
  if(/^los angeles kings$/i.test(t)){

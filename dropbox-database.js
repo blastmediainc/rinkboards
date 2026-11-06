@@ -14,7 +14,9 @@ const canonicalTeam=name=>{
  const canonical=['Boston Fleet','Minnesota Frost','Montréal Victoire','New York Sirens','Ottawa Charge','Toronto Sceptres','Vancouver Goldeneyes','Seattle Torrent','PWHL Detroit','PWHL Hamilton','PWHL Las Vegas','PWHL San Jose'];
  return canonical.find(t=>pwhlTeamKey(t)===pwhlTeamKey(name))||name;
 };
-const distinctTeams=names=>[...new Set(names.map(canonicalTeam))].sort((a,b)=>a.localeCompare(b));
+const distinctTeams=names=>[...new Set(names.map(canonicalTeam))]
+ .filter(t=>!(activeBrand==='nhl'&&/^buffalo\s*sabres$/i.test(t)))
+ .sort((a,b)=>a.localeCompare(b));
 const inTeam=(e,team)=>!team||canonicalTeam(e.team)===canonicalTeam(team)||isLeague(e);
 const inScope=(e,team,season)=>inTeam(e,team)&&(!season||e.season===season);
 const PWHL_TEAMS = ['Boston Fleet','Minnesota Frost','Montréal Victoire','New York Sirens','Ottawa Charge','Toronto Sceptres','Vancouver Goldeneyes','Seattle Torrent','PWHL Detroit','PWHL Hamilton','PWHL Las Vegas','PWHL San Jose'];
@@ -182,7 +184,7 @@ function updateTeamStrip(){
    const canonical=canonicalTeam(name),key=normalizeName(canonical);
    if(key&&!byKey.has(key))byKey.set(key,canonical);
  }
- const teams=[...byKey.values()].sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'}));
+ const teams=[...byKey.values()].filter(name=>!(activeBrand==='nhl'&&normalizeName(name)==='buffalosabres')).sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'}));
  const signature=teams.map(normalizeName).join('|');
  strip.hidden=!teams.length;
  if(teamStripRenderedLeague===activeBrand&&teamStripRenderedNames===signature){
@@ -452,7 +454,7 @@ async function shareDestinationTeams(def){
   let batch=data;
   while(true){for(const item of batch.entries||[]){if(item['.tag']==='folder'&&item.name!=='Team Logos'&&item.name!==LEAGUE_TEAM)teams.add(item.name)}if(!batch.has_more)break;batch=await rpc('/files/list_folder/continue',{cursor:batch.cursor})}
  }catch(e){if(!String(e).includes('not_found'))console.warn('Could not list destination teams',def.label,e)}
- return [...teams].sort((a,b)=>a.localeCompare(b));
+ return [...teams].filter(t=>!(def.key==='nhl'&&/^buffalo\s*sabres$/i.test(t))).sort((a,b)=>a.localeCompare(b));
 }
 async function openShareTeams(){
  if(expired())throw Error('Connect Dropbox before sharing artwork.');
