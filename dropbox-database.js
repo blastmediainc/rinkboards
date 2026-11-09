@@ -914,4 +914,116 @@ doc.setFont('NeoSansCourier','bold');doc.setFontSize(15);doc.setCharSpace(1.4);d
 function courierInit(){courierEl('courierReturnAddress')?.addEventListener('change',courierReturnUpdate);courierReturnUpdate();courierEl('dbCourierOpen')?.addEventListener('click',()=>perform(courierOpen));courierEl('courierClose')?.addEventListener('click',()=>courierEl('courierOverlay').hidden=true);courierEl('courierOverlay')?.addEventListener('click',e=>{if(e.target===courierEl('courierOverlay'))courierEl('courierOverlay').hidden=true});for(const id of ['courierName','courierLocation','courierDate'])courierEl(id)?.addEventListener('input',courierUpdate);courierEl('courierExport')?.addEventListener('click',courierExport)}
 
 courierInit();
+
+// V197 — global team lookup; works even when the user does not know the league.
+const GLOBAL_LEAGUES=[
+ {id:'nhl',label:'NHL',root:()=>localStorage.getItem(NHL_ROOT_KEY)||'/NHL Rinkboards'},
+ {id:'ahl',label:'AHL',root:()=>localStorage.getItem(AHL_ROOT_KEY)||'/AHL Rinkboards'},
+ {id:'bchl',label:'BCHL',root:()=>localStorage.getItem(bchlRootKey)||'/BCHL Rinkboards'},
+ {id:'pwhl',label:'PWHL',root:()=>localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards'},
+ {id:'ncaa',label:'NCAA — Men',division:'Men',root:()=> (localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards')+'/Men'},
+ {id:'ncaa',label:'NCAA — Women',division:'Women',root:()=> (localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards')+'/Women'},
+ {id:'nll',label:'NLL',root:()=>localStorage.getItem(NLL_ROOT_KEY)||'/NLL Rinkboards'},
+ {id:'usports',label:'USports',root:()=>localStorage.getItem(USPORTS_ROOT_KEY)||'/USports Rinkboards'}
+];
+const globalTeams=new Map();
+const normalizeGlobal=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+function globalAdd(team,league){
+ if(!team||/^(team logos|league.wide|_league.wide)$/i.test(team))return;
+ if(league.id==='nhl'&&normalizeGlobal(team)==='buffalo sabres')return;
+ const key=league.label+'|'+normalizeGlobal(team);
+ if(!globalTeams.has(key))globalTeams.set(key,{team,league});
+}
+function seedGlobalTeams(){
+ for(const league of GLOBAL_LEAGUES){
+  const known=window.RinkboardLocalTeams?.[league.id]||[];
+  const preset=league.id==='ahl'?['Abbotsford Canucks','San Jose Barracuda']:
+   league.id==='bchl'?BCHL_TEAMS:league.id==='pwhl'?PWHL_TEAMS:
+   league.id==='nll'?NLL_TEAMS:league.id==='usports'?USPORTS_TEAMS:
+   league.id==='ncaa'?[NCAA_TEAM]:[];
+  for(const team of [...known,...preset])globalAdd(team,league);
+ }
+}
+let globalScanStarted=false;
+async function discoverGlobalTeams(){
+ if(globalScanStarted||expired())return;
+ globalScanStarted=true;
+ await Promise.all(GLOBAL_LEAGUES.map(async league=>{
+  try{
+   let data=await rpc('/files/list_folder',{path:league.root(),recursive:false,limit:2000});
+   while(data){
+    for(const e of data.entries||[])if(e['.tag']==='folder')globalAdd(e.name,league);
+    if(!data.has_more)break;
+    data=await rpc('/files/list_folder/continue',{cursor:data.cursor});
+   }
+  }catch(e){console.warn('Global team search: unable to scan '+league.label,e)}
+  renderGlobalTeamResults();
+ }));
+}
+function renderGlobalTeamResults(){
+ const input=$('dbGlobalTeamSearch'),list=$('dbGlobalTeamResults');
+ if(!input||!list)return;
+ const q=normalizeGlobal(input.value.trim());
+ list.replaceChildren();
+ if(!q){list.hidden=true;input.setAttribute('aria-expanded','false');return}
+ const matches=[...globalTeams.values()].filter(r=>
+  normalizeGlobal(r.team+' '+r.league.label).includes(q)||
+  normalizeGlobal(r.team).includes(q)).sort((a,b)=>
+  a.team.localeCompare(b.team)||a.league.label.localeCompare(b.league.label)).slice(0,80);
+ for(const r of matches){
+  const b=document.createElement('button');b.type='button';b.setAttribute('role','option');
+  b.textContent=r.team+' ('+r.league.label+')';
+  b.style.cssText='display:block;width:100%;text-align:left;background:white;color:#243448;border:0;padding:9px 10px;cursor:pointer;border-radius:5px';
+  b.addEventListener('mouseenter',()=>b.style.background='#edf3fa');
+  b.addEventListener('mouseleave',()=>b.style.background='white');
+  b.addEventListener('click',async()=>{
+   input.value=r.team+' ('+r.league.label+')';list.hidden=true;input.setAttribute('aria-expanded','false');
+   const brand=$('brandModeSelect');
+   if(r.league.division){
+    const division=$('ncaaDivisionSelect');
+    if(division&&division.value!==r.league.division){
+     division.value=r.league.division;
+     division.dispatchEvent(new Event('change',{bubbles:true}));
+    }
+   }
+   if(brand&&brand.value!==r.league.id){
+    brand.value=r.league.id;
+    brand.dispatchEvent(new Event('change',{bubbles:true}));
+   }
+   // Wait for Dropbox's league refresh to populate the team dropdown.
+   for(let i=0;i<60;i++){
+    const team=$('dbTeam');
+    const option=[...(team?.options||[])].find(o=>normalizeGlobal(o.value)===normalizeGlobal(r.team));
+    if(option){
+     team.value=option.value;team.dispatchEvent(new Event('change',{bubbles:true}));
+     const builder=$('builderTeam');
+     if(builder&&[...builder.options].some(o=>normalizeGlobal(o.value)===normalizeGlobal(r.team))){
+      builder.value=r.team;builder.dispatchEvent(new Event('change',{bubbles:true}));
+     }
+     return;
+    }
+    await new Promise(resolve=>setTimeout(resolve,100));
+   }
+   // A preset team can exist before its Dropbox folder is created.
+   const team=$('dbTeam');
+   if(team){team.add(new Option(r.team,r.team));team.value=r.team;team.dispatchEvent(new Event('change',{bubbles:true}));}
+  });
+  list.append(b);
+ }
+ if(!matches.length){const p=document.createElement('div');p.textContent=globalScanStarted?'No matching teams found.':'Searching teams…';p.style.padding='10px';list.append(p)}
+ list.hidden=false;input.setAttribute('aria-expanded','true');
+}
+function initGlobalTeamSearch(){
+ const input=$('dbGlobalTeamSearch'),list=$('dbGlobalTeamResults');if(!input||!list)return;
+ seedGlobalTeams();
+ input.addEventListener('input',renderGlobalTeamResults);
+ input.addEventListener('focus',()=>{discoverGlobalTeams();renderGlobalTeamResults()});
+ input.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){list.hidden=true;input.setAttribute('aria-expanded','false')}
+  if(e.key==='Enter'){const first=list.querySelector('button');if(first&&!list.hidden){e.preventDefault();first.click()}}
+ });
+ document.addEventListener('click',e=>{if(!input.parentElement.contains(e.target)){list.hidden=true;input.setAttribute('aria-expanded','false')}});
+}
+initGlobalTeamSearch();
+
 })();
