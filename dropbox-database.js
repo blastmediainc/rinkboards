@@ -230,6 +230,32 @@ function updateTeamStrip(){
  }
 }
 window.RinkboardRefreshTeamStrip=updateTeamStrip;
+// V198: UBC team branding uses the UBC Thunderbirds logo, never the USports league logo.
+// Keep the existing USports logo in the header; this applies only to team artwork/UI.
+function syncUBCTeamBranding(){
+ const isUBC=activeBrand==='usports' &&
+   String($('builderTeam')?.value||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
+     .replace(/[^a-z0-9]/gi,'').toLowerCase()==='ubcthunderbirds';
+ if(!isUBC)return;
+ const container=$('builderTeamLogo'),img=$('builderTeamLogoImage');
+ if(!container||!img)return;
+ if(!img.getAttribute('src')?.endsWith('ubc-thunderbirds.webp'))
+   img.src='ubc-thunderbirds.webp';
+ img.alt='UBC Thunderbirds logo';
+ img.hidden=false;container.hidden=false;
+}
+document.addEventListener('change',e=>{
+ if(e.target?.id==='builderTeam'||e.target?.id==='brandModeSelect')
+  requestAnimationFrame(syncUBCTeamBranding);
+});
+window.addEventListener('rinkboard-brand-changed',()=>requestAnimationFrame(syncUBCTeamBranding));
+document.addEventListener('DOMContentLoaded',()=>{
+ const img=$('builderTeamLogoImage');
+ if(img)new MutationObserver(()=>{if(activeBrand==='usports'&&$('builderTeam')?.value==='UBC Thunderbirds')syncUBCTeamBranding()})
+   .observe(img,{attributes:true,attributeFilter:['src','hidden']});
+ syncUBCTeamBranding();
+});
+
 function builderChoices(){
  const teamEl=$('builderTeam'),seasonEl=$('builderSeason');
  const selectedTeam=canonicalTeam(teamEl.value),selectedSeason=seasonEl.value;
