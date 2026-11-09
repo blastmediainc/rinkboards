@@ -9,11 +9,14 @@ try{config={...config,...JSON.parse(localStorage.getItem(cfgKey)||'{}')};token=J
 const LEAGUE_TEAM='League-Wide';
 const isLeague=e=>(activeBrand==='bchl'||activeBrand==='pwhl')&&e.team===LEAGUE_TEAM;
 const pwhlTeamKey=name=>String(name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/gi,'').toLowerCase();
-const canonicalTeam=name=>{
- if(activeBrand!=='pwhl')return name;
- const canonical=['Boston Fleet','Minnesota Frost','Montréal Victoire','New York Sirens','Ottawa Charge','Toronto Sceptres','Vancouver Goldeneyes','Seattle Torrent','PWHL Detroit','PWHL Hamilton','PWHL Las Vegas','PWHL San Jose'];
- return canonical.find(t=>pwhlTeamKey(t)===pwhlTeamKey(name))||name;
-};
+const PWHL_CANONICAL_TEAMS=['Boston Fleet','Minnesota Frost','Montréal Victoire','New York Sirens','Ottawa Charge','Toronto Sceptres','Vancouver Goldeneyes','Seattle Torrent','PWHL Detroit','PWHL Hamilton','PWHL Las Vegas','PWHL San Jose'];
+function canonicalPWHLTeam(name){
+ const key=pwhlTeamKey(name);
+ // Older Dropbox folders sometimes omit spaces and the accented 'é'.
+ if(key==='montralvictoire'||key==='montrealvictoire')return 'Montréal Victoire';
+ return PWHL_CANONICAL_TEAMS.find(t=>pwhlTeamKey(t)===key)||name;
+}
+const canonicalTeam=name=>activeBrand==='pwhl'?canonicalPWHLTeam(name):name;
 const distinctTeams=names=>[...new Set(names.map(canonicalTeam))]
  .filter(t=>!(activeBrand==='nhl'&&/^buffalo\s*sabres$/i.test(t)))
  .sort((a,b)=>a.localeCompare(b));
@@ -230,30 +233,12 @@ function updateTeamStrip(){
  }
 }
 window.RinkboardRefreshTeamStrip=updateTeamStrip;
-// V198: UBC team branding uses the UBC Thunderbirds logo, never the USports league logo.
-// Keep the existing USports logo in the header; this applies only to team artwork/UI.
-function syncUBCTeamBranding(){
- const isUBC=activeBrand==='usports' &&
-   String($('builderTeam')?.value||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
-     .replace(/[^a-z0-9]/gi,'').toLowerCase()==='ubcthunderbirds';
- if(!isUBC)return;
- const container=$('builderTeamLogo'),img=$('builderTeamLogoImage');
- if(!container||!img)return;
- if(!img.getAttribute('src')?.endsWith('ubc-thunderbirds.webp'))
-   img.src='ubc-thunderbirds.webp';
- img.alt='UBC Thunderbirds logo';
- img.hidden=false;container.hidden=false;
-}
-document.addEventListener('change',e=>{
- if(e.target?.id==='builderTeam'||e.target?.id==='brandModeSelect')
-  requestAnimationFrame(syncUBCTeamBranding);
-});
-window.addEventListener('rinkboard-brand-changed',()=>requestAnimationFrame(syncUBCTeamBranding));
-document.addEventListener('DOMContentLoaded',()=>{
- const img=$('builderTeamLogoImage');
- if(img)new MutationObserver(()=>{if(activeBrand==='usports'&&$('builderTeam')?.value==='UBC Thunderbirds')syncUBCTeamBranding()})
-   .observe(img,{attributes:true,attributeFilter:['src','hidden']});
- syncUBCTeamBranding();
+// V202: UBC team branding is handled through the locally bundled logo in
+// updateTeamStrip(). Avoid DOM mutation observers and forced image updates
+// while the USports database is rebuilding its team selectors.
+document.addEventListener('change',event=>{
+ if(event.target?.id==='builderTeam'&&activeBrand==='usports')
+   updateTeamStrip();
 });
 
 function builderChoices(){
@@ -475,7 +460,52 @@ function scheduleCardPreview(tile,record){
  },{root:null,rootMargin:'150px'});
  tile._previewRecord=record;previewObserver.observe(tile);
 }
-async function loadPreview(tile,record){try{const path=record.path.replace(/\.rinkboard\.json$/i,'.preview.svg');let svg=hoverPreviewCache.get(path);if(!svg){svg=await download(path);hoverPreviewCache.set(path,svg)}if(!tile.isConnected)return;let blob=new Blob([svg],{type:'image/svg+xml'}),url=URL.createObjectURL(blob),img=document.createElement('img');img.alt=record.name;img.onload=()=>URL.revokeObjectURL(url);img.onerror=()=>URL.revokeObjectURL(url);img.src=url;tile.prepend(img)}catch{}}
+// V203: Database cards use small compressed thumbnails, never full-resolution SVG DOMs.
+// Limit simultaneous SVG decodes to avoid stalling the interface on large team databases.
+const previewJobs=[];
+let previewJobsActive=0;
+function enqueuePreview(job){return new Promise((resolve,reject)=>{
+ previewJobs.push({job,resolve,reject});drainPreviewJobs();
+})}
+function drainPreviewJobs(){
+ while(previewJobsActive<2&&previewJobs.length){
+  const task=previewJobs.shift();previewJobsActive++;
+  Promise.resolve().then(task.job).then(task.resolve,task.reject).finally(()=>{
+   previewJobsActive--;drainPreviewJobs();
+  });
+ }
+}
+function smallPreviewJpeg(svg){return new Promise((resolve,reject)=>{
+ const url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml;charset=utf-8'}));
+ const source=new Image();
+ source.onload=()=>{
+  try{
+   const width=Math.min(480,Math.max(1,source.naturalWidth||480));
+   const ratio=(source.naturalHeight||30)/Math.max(1,source.naturalWidth||480);
+   const height=Math.max(1,Math.round(width*ratio));
+   const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
+   const ctx=canvas.getContext('2d',{alpha:false});ctx.fillStyle='#fff';
+   ctx.fillRect(0,0,width,height);ctx.drawImage(source,0,0,width,height);
+   resolve(canvas.toDataURL('image/jpeg',0.72));
+  }catch(e){reject(e)}finally{URL.revokeObjectURL(url)}
+ };
+ source.onerror=()=>{URL.revokeObjectURL(url);reject(Error('Thumbnail SVG could not load'))};
+ source.src=url;
+})}
+async function loadPreview(tile,record){
+ const path=record.path.replace(/\.rinkboard\.json$/i,'.preview.svg');
+ try{
+  let pending=hoverPreviewCache.get(path);
+  if(!pending){
+   pending=enqueuePreview(async()=>smallPreviewJpeg(await download(path)));
+   hoverPreviewCache.set(path,pending);
+  }
+  const thumbnail=await pending;
+  if(!tile.isConnected)return;
+  const img=document.createElement('img');img.alt=record.name;img.decoding='async';
+  img.src=thumbnail;tile.prepend(img);
+ }catch(e){hoverPreviewCache.delete(path);console.warn('Thumbnail unavailable',record.name,e)}
+}
 function activeBoard(){let obj=window.RinkboardBridge.getProject();return {obj,board:obj.boards[obj.activeBoard]}}
 function context(){let team=$('dbTeam').value.trim(),season=$('dbSeason').value.trim();if(!team||!season)throw Error('Enter a team and season before saving.');return {team,season}}
 async function saveOne(index,ctx){
@@ -533,7 +563,8 @@ async function shareDestinationTeams(def){
   let batch=data;
   while(true){for(const item of batch.entries||[]){if(item['.tag']==='folder'&&item.name!=='Team Logos'&&item.name!==LEAGUE_TEAM)teams.add(item.name)}if(!batch.has_more)break;batch=await rpc('/files/list_folder/continue',{cursor:batch.cursor})}
  }catch(e){if(!String(e).includes('not_found'))console.warn('Could not list destination teams',def.label,e)}
- return [...teams].filter(t=>!(def.key==='nhl'&&/^buffalo\s*sabres$/i.test(t))).sort((a,b)=>a.localeCompare(b));
+ const clean=[...teams].map(t=>def.key==='pwhl'?canonicalPWHLTeam(t):t);
+ return [...new Set(clean)].filter(t=>!(def.key==='nhl'&&/^buffalo\s*sabres$/i.test(t))).sort((a,b)=>a.localeCompare(b));
 }
 async function openShareTeams(){
  if(expired())throw Error('Connect Dropbox before sharing artwork.');
@@ -956,6 +987,7 @@ const globalTeams=new Map();
 const normalizeGlobal=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 function globalAdd(team,league){
  if(!team||/^(team logos|league.wide|_league.wide)$/i.test(team))return;
+ if(league.id==='pwhl')team=canonicalPWHLTeam(team);
  if(league.id==='nhl'&&normalizeGlobal(team)==='buffalo sabres')return;
  const key=league.label+'|'+normalizeGlobal(team);
  if(!globalTeams.has(key))globalTeams.set(key,{team,league});
