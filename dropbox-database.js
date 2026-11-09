@@ -359,11 +359,12 @@ async function exportSelected(){
   // Contact is an export-only override; do not modify the saved Dropbox record.
   if(contact)board.settings.contact=contact;
   const stem=[record.team,record.season,record.name,record.size].map(sanitize).join('_');
+  const productionName=[record.team,'Rinkboards-'+record.name].map((part,i)=>i===0?String(part).replace(/[^a-z0-9]/gi,''):String(part).replace(/[^a-z0-9_-]/gi,'')).join('_')+'_'+Math.ceil(qty/2)+'copies.pdf';
   if(proof)proofBoards.push(board);
   if(production){
    message('Generating production: '+record.name);
    const bytes=await window.RinkboardBridge.exportDatabaseSelection([board],false);
-   if(zip)zip.file(stem+'_Production.pdf',bytes);else downloadPdf(bytes,stem+'_Production.pdf');
+   if(zip)zip.file(productionName,bytes);else downloadPdf(bytes,productionName);
   }
   exported++;
  }
