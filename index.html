@@ -1288,4 +1288,30 @@ update();
 <div style="display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid #e0e5ed"><strong id="dbSelectedTitle" style="font-size:17px;flex:1">Selected rinkboards</strong><button type="button" id="dbSelectedClose" aria-label="Close selected rinkboards">Close ✕</button></div>
 <div id="dbSelectedItems" style="overflow:auto;padding:12px 20px;min-height:90px"></div>
 <div style="padding:12px 20px;border-top:1px solid #e0e5ed;font-size:12px;color:#596779">Selections are kept even when database filters change.</div>
-</section></div></body></html>
+</section></div>
+<!-- V190: Builder workspace team-colour tint. Presentation only; proof/export DOM remains untouched. -->
+<style id="v190-team-workspace-background">
+.canvaswrap{background-color:var(--v190-workspace,#f3f7f8)!important;background-image:none!important;transition:background-color .22s ease}
+</style>
+<script id="v190-team-workspace-background-script">
+(()=>{
+ const original='#f3f7f8';
+ function update(){
+  const body=document.body,league=document.getElementById('brandModeSelect')?.value||'';
+  const styles=getComputedStyle(body);
+  const primaryName=league==='nhl'||league==='ahl'?'--nhl-primary':league==='pwhl'?'--pwhl-primary':league==='bchl'?'--bchl-primary':null;
+  let color=primaryName?styles.getPropertyValue(primaryName).trim():'';
+  if(league==='ncaa'&&body.classList.contains('wisconsin-team'))color='#C5050C';
+  if(league==='nll'&&body.classList.contains('warriors-team'))color='#0A2351';
+  if(!/^#[0-9a-f]{6}$/i.test(color))color='';
+  // Keep the background pale enough for editor handles and selection guides.
+  body.style.setProperty('--v190-workspace',color?'color-mix(in srgb, '+color+' 13%, white)':original);
+ }
+ function schedule(){requestAnimationFrame(()=>requestAnimationFrame(update));}
+ document.addEventListener('change',e=>{if(e.target?.id==='builderTeam'||e.target?.id==='brandModeSelect')schedule()});
+ window.addEventListener('rinkboard-brand-changed',schedule);
+ const team=document.getElementById('builderTeam');if(team)new MutationObserver(schedule).observe(team,{childList:true,subtree:true});
+ schedule();
+})();
+</script>
+</body></html>
