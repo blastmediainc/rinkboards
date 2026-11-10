@@ -48,6 +48,8 @@ async function loadLogo(team){
  const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/gi,'').toLowerCase();
  const localGroup=window.RinkboardLocalLogoFiles?.[league]||{};
  const requested=norm(team);
+ if(league==='usports'&&requested==='ubcthunderbirds')return 'ubc-thunderbirds.png';
+ if(league==='ahl'&&requested==='sanjosebarracuda')return 'san-jose-barracuda.png';
  for(const [teamName,filePath] of Object.entries(localGroup)){
    if(norm(teamName)===requested)return filePath;
  }
@@ -70,8 +72,9 @@ async function loadLogo(team){
 }
 window.RinkboardTeamLogoLoader=loadLogo;
 function refresh(){
- if(awaitingTeamSelection)return;
- const team=teamSelect.value.trim();if(team===current)return;current=team;const token=++request;
+ const team=teamSelect.value.trim();
+ const identity=(document.getElementById('brandModeSelect')?.value||'nhl')+'/'+team;
+ if(identity===current)return;awaitingTeamSelection=false;current=identity;const token=++request;
  image.onload=null;image.onerror=null;hide();
  if(!team||team==='__add__'||/^league[ -]?wide$/i.test(team))return;
  const key=(document.getElementById('brandModeSelect')?.value||'nhl')+'/'+normalize(team);
