@@ -9,9 +9,11 @@ try{config={...config,...JSON.parse(localStorage.getItem(cfgKey)||'{}')};token=J
 const LEAGUE_TEAM='League-Wide';
 const isLeague=e=>(activeBrand==='bchl'||activeBrand==='pwhl')&&e.team===LEAGUE_TEAM;
 const pwhlTeamKey=name=>String(name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/gi,'').toLowerCase();
-const PWHL_CANONICAL_TEAMS=['Boston Fleet','Minnesota Frost','Montréal Victoire','New York Sirens','Ottawa Charge','Toronto Sceptres','Vancouver Goldeneyes','Seattle Torrent','PWHL Detroit','PWHL Hamilton','PWHL Las Vegas','PWHL San Jose'];
+const PWHL_CANONICAL_TEAMS=['Boston Fleet','Minnesota Frost','Montréal Victoire','New York Sirens','Ottawa Charge','Toronto Sceptres','Vancouver Goldeneyes','Seattle Torrent','Detroit Clutch','Hamilton Havoc','Vegas Vanguards','San Jose Sea Lions'];
 function canonicalPWHLTeam(name){
  const key=pwhlTeamKey(name);
+ const rebrands={"pwhllasvegas": "Vegas Vanguards", "pwhlhamilton": "Hamilton Havoc", "pwhlsanjose": "San Jose Sea Lions", "pwhldetroit": "Detroit Clutch"};
+ if(rebrands[key])return rebrands[key];
  // Older Dropbox folders sometimes omit spaces and the accented 'é'.
  if(key==='montralvictoire'||key==='montrealvictoire')return 'Montréal Victoire';
  return PWHL_CANONICAL_TEAMS.find(t=>pwhlTeamKey(t)===key)||name;
@@ -22,7 +24,7 @@ const distinctTeams=names=>[...new Set(names.map(canonicalTeam))]
  .sort((a,b)=>a.localeCompare(b));
 const inTeam=(e,team)=>!team||canonicalTeam(e.team)===canonicalTeam(team)||isLeague(e);
 const inScope=(e,team,season)=>inTeam(e,team)&&(!season||e.season===season);
-const PWHL_TEAMS = ['Boston Fleet','Minnesota Frost','Montréal Victoire','New York Sirens','Ottawa Charge','Toronto Sceptres','Vancouver Goldeneyes','Seattle Torrent','PWHL Detroit','PWHL Hamilton','PWHL Las Vegas','PWHL San Jose'];
+const PWHL_TEAMS = ['Boston Fleet','Minnesota Frost','Montréal Victoire','New York Sirens','Ottawa Charge','Toronto Sceptres','Vancouver Goldeneyes','Seattle Torrent','Detroit Clutch','Hamilton Havoc','Vegas Vanguards','San Jose Sea Lions'];
 const PWHL_ROOT_KEY='rinkboard-pwhl-root-v116';
 const NCAA_ROOT_KEY='rinkboard-ncaa-root-v137';
 const NLL_ROOT_KEY='rinkboard-nll-root-v140';
@@ -758,7 +760,7 @@ function bulkParse(raw){const lines=String(raw||'').replace(/\r\n?/g,'\n').split
 function bulkScope(){const team=$('dbBulkTeam').value,season=$('dbBulkSeason').value;if(!team||!season)throw Error('Select a Team and Season in Bulk Import before matching.');return {team,season}}
 function bulkResetMatches(){bulkRows=[];bulkEl('dbBulkRows').replaceChildren();bulkEl('dbBulkApply').disabled=true;bulkEl('dbBulkExport').disabled=true}
 function bulkFillSelect(el,values,current,placeholder){el.replaceChildren(new Option(placeholder,''));for(const v of values)el.add(new Option(v,v));el.value=values.includes(current)?current:''}
-function bulkUpdateSeasons(current){const team=bulkEl('dbBulkTeam').value;const seasons=[...new Set([...entries.filter(e=>inTeam(e,team)).map(e=>e.season),...[...folderChoices.seasons].filter(s=>s.startsWith(team+'/')).map(s=>s.slice(team.length+1))])].sort((a,b)=>a.localeCompare(b));bulkFillSelect(bulkEl('dbBulkSeason'),seasons,current,'Select season…')}
+function bulkUpdateSeasons(current){const team=bulkEl('dbBulkTeam').value;const seasons=[...new Set([...entries.filter(e=>inTeam(e,team)).map(e=>e.season),...[...folderChoices.seasons].filter(s=>canonicalTeam(s.split('/')[0])===canonicalTeam(team)).map(s=>s.slice(s.indexOf('/')+1))])].sort((a,b)=>a.localeCompare(b));bulkFillSelect(bulkEl('dbBulkSeason'),seasons,current,'Select season…')}
 function bulkOpenScope(){const teams=distinctTeams([...entries.filter(e=>!isLeague(e)&&e.team!=='Team Logos').map(e=>e.team),...[...folderChoices.teams].filter(t=>t!=='Team Logos'&&((activeBrand!=='bchl'&&activeBrand!=='pwhl')||t!==LEAGUE_TEAM)),...presetTeams()]);const currentTeam=bulkEl('dbBulkTeam').value||$('dbTeam').value;const currentSeason=bulkEl('dbBulkSeason').value||$('dbSeason').value;bulkFillSelect(bulkEl('dbBulkTeam'),teams,currentTeam,'Select team…');bulkUpdateSeasons(currentSeason)}
 function bulkSyncDatabase(){const {team,season}=bulkScope();$('dbTeam').value=team;$('dbSeason').value='';render();$('dbSeason').value=season;render();if($('dbGroupTeam')){$('dbGroupTeam').value=team;groupScopeOptions();$('dbGroupSeason').value=season;}groupRender();if($('dbTeam').value!==team||$('dbSeason').value!==season)throw Error('Could not apply the selected team and season to the Database. Refresh the database and try again.')}
 
@@ -872,7 +874,7 @@ async function recoveryRestore(){
  }
  recoveryStatus('Restore complete: '+ok+' restored, '+failed+' failed. Refresh the database, confirm the projects open, then regenerate previews.');
 }
-$('dbRecoveryOpen').onclick=()=>{const sel=$('dbRecoveryTeam');sel.replaceChildren(new Option('All teams in selected league',''));const names=new Set([...entries.map(e=>e.team),...folderChoices.teams,...presetTeams()].filter(t=>t&&t!=='Team Logos'));for(const name of [...names].sort((a,b)=>a.localeCompare(b)))sel.add(new Option(name,name));const selected=$('dbTeam').value;if(names.has(selected))sel.value=selected;recoveryRows=[];$('dbRecoveryRows').replaceChildren();$('dbRecoveryRestore').disabled=true;recoveryUI().hidden=false;recoveryStatus('Ready. Current league: '+activeBrand.toUpperCase()+'. Scan only reads files and history.');};
+$('dbRecoveryOpen').onclick=()=>{const sel=$('dbRecoveryTeam');sel.replaceChildren(new Option('All teams in selected league',''));const names=new Set([...entries.map(e=>e.team),...folderChoices.teams,...presetTeams()].filter(t=>t&&t!=='Team Logos'));for(const name of distinctTeams([...names]).sort((a,b)=>a.localeCompare(b)))sel.add(new Option(name,name));const selected=$('dbTeam').value;if(names.has(selected))sel.value=selected;recoveryRows=[];$('dbRecoveryRows').replaceChildren();$('dbRecoveryRestore').disabled=true;recoveryUI().hidden=false;recoveryStatus('Ready. Current league: '+activeBrand.toUpperCase()+'. Scan only reads files and history.');};
 $('dbRecoveryTeam').onchange=()=>{recoveryRows=[];$('dbRecoveryRows').replaceChildren();$('dbRecoveryRestore').disabled=true;recoveryStatus('Scope changed. Scan again before restoring.');};
 $('dbRecoveryClose').onclick=()=>recoveryUI().hidden=true;
 $('dbRecoveryScan').onclick=()=>perform(recoveryScan);
