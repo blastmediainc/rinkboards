@@ -1083,12 +1083,4 @@ function initGlobalTeamSearch(){
 }
 initGlobalTeamSearch();
 
-
-(()=>{
- const b=document.createElement('button');b.type='button';b.textContent='Merge NCAA folders';const anchor=$('dbRefresh');if(!anchor)return;anchor.after(b);
- async function children(path){let p=await rpc('/files/list_folder',{path,recursive:false,limit:2000});let a=[...p.entries];while(p.has_more){p=await rpc('/files/list_folder/continue',{cursor:p.cursor});a.push(...p.entries)}return a;}
- async function merge(from,to,report){for(const e of await children(from)){const dest=(await children(to)).find(x=>x.name.toLowerCase()===e.name.toLowerCase());const src=from+'/'+e.name;if(!dest){await rpc('/files/move_v2',{from_path:src,to_path:to+'/'+e.name,autorename:false});report.push('Moved '+src);}else if(e['.tag']==='folder'&&dest['.tag']==='folder'){await merge(src,to+'/'+dest.name,report);}else report.push('Conflict retained: '+src);}if(!(await children(from)).length){await rpc('/files/delete_v2',{path:from});report.push('Removed empty '+from);}}
- b.onclick=async()=>{if(expired()){alert('Connect Dropbox first.');return;}if(!confirm('Merge NCAA Men and Women into the NCAA root? Close other builder sessions first. Conflicting files remain in their original folders. Only empty folders are removed.'))return;b.disabled=true;const report=[];try{const root=(localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards').replace(/\/+$/,'');for(const e of await children(root)){if(e['.tag']==='folder'&&/^(Men|Women)$/i.test(e.name))await merge(root+'/'+e.name,root,report);}if(activeBrand==='ncaa')await refresh();}catch(e){report.push('ERROR: '+e.message);}finally{b.disabled=false;alert(report.join('\n')||'No old folders found.');}};
-})();
-
 })();
