@@ -30,14 +30,14 @@ const NCAA_ROOT_KEY='rinkboard-ncaa-root-v137';
 const NLL_ROOT_KEY='rinkboard-nll-root-v140';
 const NLL_TEAMS=['Vancouver Warriors']; const USPORTS_ROOT_KEY='rinkboard-usports-root-v193'; const USPORTS_TEAMS=['UBC Thunderbirds'];
 const NCAA_TEAM='University of Wisconsin Badgers';
-const ncaaDivision=()=>localStorage.getItem('rinkboard-ncaa-division-v137')==='Women'?'Women':'Men';
+
 const NHL_ROOT_KEY='rinkboard-nhl-root-v134', AHL_ROOT_KEY='rinkboard-ahl-root-v134';
 const BCHL_TEAMS = ["Alberni Valley Bulldogs", "Cowichan Valley Capitals", "Nanaimo Clippers", "Powell River Kings", "Victoria Grizzlies", "Chilliwack Chiefs", "Coquitlam Express", "Langley Rivermen", "Prince George Spruce Kings", "Surrey Eagles", "Cranbrook Bucks", "Salmon Arm Silverbacks", "Trail Smoke Eaters", "Vernon Vipers", "West Kelowna Warriors", "Blackfalds Bulldogs", "Brooks Bandits", "Okotoks Oilers", "Sherwood Park Crusaders", "Spruce Grove Saints"];
 const bchlRootKey='rinkboard-bchl-root-v88';
 const brandKey='rinkboard-active-brand-v85';
 let activeBrand=['bchl','pwhl','nhl','ahl','ncaa','nll','usports'].includes(localStorage.getItem(brandKey))?localStorage.getItem(brandKey):'blast';
 let blastFolder=config.folder||'/Rinkboard Database';
-function brandRoot(){return activeBrand==='bchl'?(localStorage.getItem(bchlRootKey)||'/BCHL Rinkboards'):activeBrand==='pwhl'?(localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards'):activeBrand==='nhl'?(localStorage.getItem(NHL_ROOT_KEY)||'/NHL Rinkboards'):activeBrand==='ahl'?(localStorage.getItem(AHL_ROOT_KEY)||'/AHL Rinkboards'):activeBrand==='ncaa'?(localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards')+'/'+ncaaDivision():activeBrand==='nll'?(localStorage.getItem(NLL_ROOT_KEY)||'/NLL Rinkboards'):activeBrand==='usports'?(localStorage.getItem(USPORTS_ROOT_KEY)||'/USports Rinkboards'):blastFolder}
+function brandRoot(){return activeBrand==='bchl'?(localStorage.getItem(bchlRootKey)||'/BCHL Rinkboards'):activeBrand==='pwhl'?(localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards'):activeBrand==='nhl'?(localStorage.getItem(NHL_ROOT_KEY)||'/NHL Rinkboards'):activeBrand==='ahl'?(localStorage.getItem(AHL_ROOT_KEY)||'/AHL Rinkboards'):activeBrand==='ncaa'?(localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards'):activeBrand==='nll'?(localStorage.getItem(NLL_ROOT_KEY)||'/NLL Rinkboards'):activeBrand==='usports'?(localStorage.getItem(USPORTS_ROOT_KEY)||'/USports Rinkboards'):blastFolder}
 function presetTeams(){return activeBrand==='bchl'?BCHL_TEAMS:activeBrand==='pwhl'?PWHL_TEAMS:activeBrand==='ahl'?['Abbotsford Canucks','San Jose Barracuda']:activeBrand==='ncaa'?[NCAA_TEAM]:activeBrand==='nll'?NLL_TEAMS:activeBrand==='usports'?USPORTS_TEAMS:[]}
 config.folder=brandRoot();
 function updateLeagueControl(){const label=$('dbLeagueWideLabel');if(label)label.style.display='flex';const builder=$('builderLeagueWideLabel');if(builder)builder.style.display='inline-flex'}
@@ -50,7 +50,7 @@ async function switchDatabaseBrand(next){
  $('dbTeam').value='';$('dbSeason').value='';$('dbSize').value='all';
  $('builderTeam').value='';$('builderSeason').value='';
  builderChoices();render();groupRender();
- message(activeBrand==='bchl'?'BCHL: select a team and season, or add a new one.':activeBrand==='pwhl'?'PWHL: select a team and season, or add a new one.':activeBrand==='nhl'?'NHL database selected.':activeBrand==='ahl'?'AHL database selected.':activeBrand==='ncaa'?'NCAA '+ncaaDivision()+'\'s database selected.':activeBrand==='nll'?'NLL database selected.':activeBrand==='usports'?'USports database selected.':'Legacy Blast Media database selected.');
+ message(activeBrand==='bchl'?'BCHL: select a team and season, or add a new one.':activeBrand==='pwhl'?'PWHL: select a team and season, or add a new one.':activeBrand==='nhl'?'NHL database selected.':activeBrand==='ahl'?'AHL database selected.':activeBrand==='ncaa'?'NCAA database selected.':activeBrand==='nll'?'NLL database selected.':activeBrand==='usports'?'USports database selected.':'Legacy Blast Media database selected.');
  if(!expired())await refresh();
 }
 
@@ -150,7 +150,7 @@ function setBusy(b){busy=b;for(let id of ['dbSave','dbSaveAll','dbRefresh','dbCo
 async function perform(fn){if(busy)return;setBusy(true);try{await fn()}catch(e){console.error(e);message(e.message||String(e))}finally{setBusy(false)}}
 function applyConfig(){
  const nextKey=$('dbAppKey').value.trim();
- const nextFolder=$('dbFolder').value.trim().replace(/\/+$/,'')||(activeBrand==='bchl'?'/BCHL Rinkboards':activeBrand==='pwhl'?'/PWHL Rinkboards':activeBrand==='nhl'?'/NHL Rinkboards':activeBrand==='ahl'?'/AHL Rinkboards':activeBrand==='ncaa'?'/NCAA Rinkboards/'+ncaaDivision():'/Rinkboard Database');
+ const nextFolder=$('dbFolder').value.trim().replace(/\/+$/,'')||(activeBrand==='bchl'?'/BCHL Rinkboards':activeBrand==='pwhl'?'/PWHL Rinkboards':activeBrand==='nhl'?'/NHL Rinkboards':activeBrand==='ahl'?'/AHL Rinkboards':activeBrand==='ncaa'?'/NCAA Rinkboards':'/Rinkboard Database');
  const changed=nextFolder!==config.folder||nextKey!==config.appKey;
  config.appKey=nextKey;config.folder=nextFolder;
  if(activeBrand==='bchl')localStorage.setItem(bchlRootKey,nextFolder);
@@ -170,7 +170,7 @@ async function completeOAuth(){let q=new URLSearchParams(location.search);if(!q.
 async function listAll(){let result=[];let first=await rpc('/files/list_folder',{path:base(),recursive:true,include_deleted:false,limit:2000});result.push(...first.entries);while(first.has_more){first=await rpc('/files/list_folder/continue',{cursor:first.cursor});result.push(...first.entries)}return result.filter(x=>x['.tag']==='file'&&x.name.endsWith('.rinkboard.json'))}
 function parseEntry(meta){let path=meta.path_display||meta.path_lower||'',prefix=base()+'/';if(!path.toLowerCase().startsWith(prefix.toLowerCase()))return null;let parts=path.slice(prefix.length).split('/');if(parts.length!==4)return null;let [team,season,size,name]=parts;let width=size.match(/^30x(.+)$/i)?.[1];if(!width)return null;return {team,season,size,width,name:name.replace(/\.rinkboard\.json$/i,''),path,rev:meta.rev,id:meta.id}}
 async function addCategory(id){const previous=id==='dbTeam'?'':id==='dbSeason'?'': 'all';const team=$('dbTeam').value,season=$('dbSeason').value;const type=id==='dbTeam'||id==='builderTeam'?'team':id==='dbSeason'||id==='builderSeason'?'season':'size';if(type==='season'&&(!team||team==='__add__')||type==='size'&&(!team||!season)){message('Select a team'+(type==='size'?' and season':'')+' first.');$(id).value=previous;return}const raw=prompt(type==='size'?'Enter board width in inches (height is 30 inches):':'Enter new '+type+' name:');if(raw===null){render();return}let name=raw.trim();if(type==='size'){const width=Number(name.replace(/[^0-9.]/g,''));if(!Number.isFinite(width)||width<=0){message('Enter a valid board width.');render();return}name='30x'+String(width)}else if(!name||name==='.'||name==='..'||/[\\/:*?"<>|]/.test(name)){message('Enter a valid '+type+' name without slashes or special filename characters.');render();return}if(expired()){message('Connect Dropbox before adding a '+type+'.');render();return}const folder=type==='team'?base()+'/'+name:type==='season'?base()+'/'+team+'/'+name:base()+'/'+team+'/'+season+'/'+name;await ensureFolders(folder);if(type==='team')folderChoices.teams.add(name);else if(type==='season')folderChoices.seasons.add(team+'/'+name);else folderChoices.sizes.add(team+'/'+season+'/'+name);if(type==='team'){$('dbTeam').innerHTML='';const o=document.createElement('option');o.value=name;$('dbTeam').append(o);$('dbTeam').value=name}else if(type==='season'){$('dbSeason').innerHTML='';const o=document.createElement('option');o.value=name;$('dbSeason').append(o);$('dbSeason').value=name}else{$('dbSize').innerHTML='';const o=document.createElement('option');o.value=name;$('dbSize').append(o);$('dbSize').value=name}render();message('Created '+type+' '+name+' in Dropbox. You can now save artboards here.')}
-async function loadFolderChoices(){folderChoices={teams:new Set(),seasons:new Set(),sizes:new Set()};let result;try{result=await rpc('/files/list_folder',{path:base(),recursive:true,limit:2000})}catch(e){if(String(e).includes('not_found'))return;throw e}let items=[...result.entries];while(result.has_more){result=await rpc('/files/list_folder/continue',{cursor:result.cursor});items.push(...result.entries)}for(const item of items){if(item['.tag']!=='folder')continue;const path=item.path_display||item.path_lower||'';if(!path.toLowerCase().startsWith((base()+'/').toLowerCase()))continue;const parts=path.slice(base().length+1).split('/');if(parts.length===1)folderChoices.teams.add(parts[0]);if(parts.length===2)folderChoices.seasons.add(parts.join('/'));if(parts.length===3&&/^30x/i.test(parts[2]))folderChoices.sizes.add(parts.join('/'))}}
+async function loadFolderChoices(){folderChoices={teams:new Set(),seasons:new Set(),sizes:new Set()};let result;try{result=await rpc('/files/list_folder',{path:base(),recursive:true,limit:2000})}catch(e){if(String(e).includes('not_found'))return;throw e}let items=[...result.entries];while(result.has_more){result=await rpc('/files/list_folder/continue',{cursor:result.cursor});items.push(...result.entries)}for(const item of items){if(item['.tag']!=='folder')continue;const path=item.path_display||item.path_lower||'';if(!path.toLowerCase().startsWith((base()+'/').toLowerCase()))continue;const parts=path.slice(base().length+1).split('/');if(activeBrand==='ncaa'&&/^(Men|Women)$/i.test(parts[0]))continue;if(parts.length===1)folderChoices.teams.add(parts[0]);if(parts.length===2)folderChoices.seasons.add(parts.join('/'));if(parts.length===3&&/^30x/i.test(parts[2]))folderChoices.sizes.add(parts.join('/'))}}
 // V163 — visual selector: ONLY teams actually present in this league's Dropbox folders/projects.
 function databaseTeamNames(){return distinctTeams([...entries.map(e=>e.team),...folderChoices.teams].filter(t=>t&&t!=='Team Logos'&&t!==LEAGUE_TEAM));}
 // V177: stable, alphabetic, locally populated logo strip. Dropbox updates do not reorder it.
@@ -552,8 +552,7 @@ const shareLeagueDefs=[
  {key:'pwhl',label:'PWHL',root:()=>localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards',preset:PWHL_TEAMS},
  {key:'nll',label:'NLL',root:()=>localStorage.getItem(NLL_ROOT_KEY)||'/NLL Rinkboards',preset:NLL_TEAMS},
  {key:'usports',label:'USports',root:()=>localStorage.getItem(USPORTS_ROOT_KEY)||'/USports Rinkboards',preset:USPORTS_TEAMS},
- {key:'ncaa-men',label:'NCAA — Men',root:()=> (localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards')+'/Men',preset:[NCAA_TEAM]},
- {key:'ncaa-women',label:'NCAA — Women',root:()=> (localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards')+'/Women',preset:[NCAA_TEAM]}
+ {key:'ncaa',label:'NCAA',root:()=>localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards',preset:[NCAA_TEAM]}
 ];
 let shareRecords=[];
 const shareUI=id=>$(id);
@@ -725,7 +724,6 @@ window.RinkboardBandDropbox={
  async deleteLogo(name){const path=base()+'/Team Logos/'+name;const res=await fetch('https://api.dropboxapi.com/2/files/delete_v2',{method:'POST',headers:{Authorization:'Bearer '+ensure(),'Content-Type':'application/json'},body:JSON.stringify({path})});if(!res.ok&&res.status!==409)throw Error('Could not remove old logo '+name)}
 };
 window.addEventListener('rinkboard-brand-changed',event=>perform(()=>switchDatabaseBrand(event.detail.brand)));
-window.addEventListener('rinkboard-ncaa-division-changed',()=>{if(activeBrand==='ncaa')perform(async()=>{config.folder=brandRoot();$('dbFolder').value=config.folder;entries=[];selectedRecord=null;selectedPaths.clear();exportQuantities.clear();folderChoices={teams:new Set(),seasons:new Set(),sizes:new Set()};$('dbTeam').value='';$('dbSeason').value='';$('builderTeam').value='';$('builderSeason').value='';builderChoices();render();groupRender();if(!expired())await refresh();});});
 // Keep the builder and database league-wide controls in sync.
 $('builderLeagueWide')?.addEventListener('change',()=>{if($('dbLeagueWide'))$('dbLeagueWide').checked=$('builderLeagueWide').checked});
 $('dbLeagueWide')?.addEventListener('change',()=>{if($('builderLeagueWide'))$('builderLeagueWide').checked=$('dbLeagueWide').checked});
@@ -980,8 +978,7 @@ const GLOBAL_LEAGUES=[
  {id:'ahl',label:'AHL',root:()=>localStorage.getItem(AHL_ROOT_KEY)||'/AHL Rinkboards'},
  {id:'bchl',label:'BCHL',root:()=>localStorage.getItem(bchlRootKey)||'/BCHL Rinkboards'},
  {id:'pwhl',label:'PWHL',root:()=>localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards'},
- {id:'ncaa',label:'NCAA — Men',division:'Men',root:()=> (localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards')+'/Men'},
- {id:'ncaa',label:'NCAA — Women',division:'Women',root:()=> (localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards')+'/Women'},
+ {id:'ncaa',label:'NCAA',root:()=>localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards'},
  {id:'nll',label:'NLL',root:()=>localStorage.getItem(NLL_ROOT_KEY)||'/NLL Rinkboards'},
  {id:'usports',label:'USports',root:()=>localStorage.getItem(USPORTS_ROOT_KEY)||'/USports Rinkboards'}
 ];
@@ -1085,5 +1082,13 @@ function initGlobalTeamSearch(){
  document.addEventListener('click',e=>{if(!input.parentElement.contains(e.target)){list.hidden=true;input.setAttribute('aria-expanded','false')}});
 }
 initGlobalTeamSearch();
+
+
+(()=>{
+ const b=document.createElement('button');b.type='button';b.textContent='Merge NCAA folders';const anchor=$('dbRefresh');if(!anchor)return;anchor.after(b);
+ async function children(path){let p=await rpc('/files/list_folder',{path,recursive:false,limit:2000});let a=[...p.entries];while(p.has_more){p=await rpc('/files/list_folder/continue',{cursor:p.cursor});a.push(...p.entries)}return a;}
+ async function merge(from,to,report){for(const e of await children(from)){const dest=(await children(to)).find(x=>x.name.toLowerCase()===e.name.toLowerCase());const src=from+'/'+e.name;if(!dest){await rpc('/files/move_v2',{from_path:src,to_path:to+'/'+e.name,autorename:false});report.push('Moved '+src);}else if(e['.tag']==='folder'&&dest['.tag']==='folder'){await merge(src,to+'/'+dest.name,report);}else report.push('Conflict retained: '+src);}if(!(await children(from)).length){await rpc('/files/delete_v2',{path:from});report.push('Removed empty '+from);}}
+ b.onclick=async()=>{if(expired()){alert('Connect Dropbox first.');return;}if(!confirm('Merge NCAA Men and Women into the NCAA root? Close other builder sessions first. Conflicting files remain in their original folders. Only empty folders are removed.'))return;b.disabled=true;const report=[];try{const root=(localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards').replace(/\/+$/,'');for(const e of await children(root)){if(e['.tag']==='folder'&&/^(Men|Women)$/i.test(e.name))await merge(root+'/'+e.name,root,report);}if(activeBrand==='ncaa')await refresh();}catch(e){report.push('ERROR: '+e.message);}finally{b.disabled=false;alert(report.join('\n')||'No old folders found.');}};
+})();
 
 })();
