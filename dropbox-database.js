@@ -1086,4 +1086,45 @@ function initGlobalTeamSearch(){
 }
 initGlobalTeamSearch();
 
+// V207 temporary PWHL folder migration. No overwrite or recursive deletion of populated folders.
+(()=>{
+ const pairs={'pwhllasvegas':'Vegas Vanguards','pwhldetroit':'Detroit Clutch','pwhlsanjose':'San Jose Sea Lions','pwhlhamilton':'Hamilton Havoc'};
+ const button=document.createElement('button');button.type='button';button.textContent='Migrate PWHL team folders';
+ const anchor=$('dbRefresh');if(!anchor)return;anchor.insertAdjacentElement('afterend',button);
+ let running=false;
+ async function children(path){let page=await rpc('/files/list_folder',{path,recursive:false,limit:2000});const result=[...page.entries];while(page.has_more){page=await rpc('/files/list_folder/continue',{cursor:page.cursor});result.push(...page.entries)}return result;}
+ async function move(from,to){await rpc('/files/move_v2',{from_path:from,to_path:to,autorename:false,allow_shared_folder:false});}
+ async function merge(from,to,report){
+  const existing=await children(to);const lookup=new Map(existing.map(e=>[e.name.toLowerCase(),e]));
+  for(const e of await children(from)){
+   const src=from+'/'+e.name,dst=to+'/'+e.name,match=lookup.get(e.name.toLowerCase());
+   if(!match){await move(src,dst);report.push('Moved '+src+' → '+dst);}
+   else if(e['.tag']==='folder'&&match['.tag']==='folder'){await merge(src,to+'/'+match.name,report);}
+   else{report.push('CONFLICT — both retained: '+src+' / '+to+'/'+match.name);}
+  }
+  if((await children(from)).length===0){await rpc('/files/delete_v2',{path:from});report.push('Removed empty folder '+from);}
+ }
+ button.onclick=async()=>{
+  if(running)return;if(expired()){alert('Connect Dropbox first.');return;}
+  running=true;button.disabled=true;const report=[];
+  try{
+   const root=(localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards').replace(/\/$/,'');
+   const folders=(await children(root)).filter(e=>e['.tag']==='folder');
+   const plan=folders.filter(e=>pairs[pwhlTeamKey(e.name)]).map(e=>({old:e.name,next:pairs[pwhlTeamKey(e.name)]}));
+   if(!plan.length){alert('No old PWHL team folders found. Migration is already complete.');return;}
+   if(!confirm('Move these folders in '+root+'?\n\n'+plan.map(p=>p.old+' → '+p.next).join('\n')+'\n\nExisting files will never be overwritten. Conflicting files stay in the old folder. Only empty old folders are deleted. Close other builder sessions before continuing.'))return;
+   for(const p of plan){try{
+    const current=await children(root);const dest=current.find(e=>e.name.toLowerCase()===p.next.toLowerCase());
+    if(!dest){await move(root+'/'+p.old,root+'/'+p.next);report.push('Renamed '+p.old+' → '+p.next);}
+    else if(dest['.tag']==='folder'){await merge(root+'/'+p.old,root+'/'+dest.name,report);}
+    else report.push('CONFLICT — destination is not a folder: '+p.next);
+   }catch(e){report.push('ERROR '+p.old+': '+e.message);}}
+   const remaining=(await children(root)).filter(e=>e['.tag']==='folder'&&pairs[pwhlTeamKey(e.name)]);
+   report.push(remaining.length?'Incomplete: old folders remain: '+remaining.map(e=>e.name).join(', '):'Complete: no old team folders remain.');
+   if(activeBrand==='pwhl'){selectedPaths.clear();exportQuantities.clear();await refresh();}
+  }catch(e){report.push('ERROR: '+e.message);}
+  finally{running=false;button.disabled=false;if(report.length){const dialog=document.createElement('dialog');const pre=document.createElement('pre');pre.style.cssText='white-space:pre-wrap;max-height:65vh;overflow:auto';pre.textContent=report.join('\n');const close=document.createElement('button');close.textContent='Close';close.onclick=()=>dialog.close();dialog.append(pre,close);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove());dialog.showModal();}}
+ };
+})();
+
 })();
