@@ -178,8 +178,8 @@ let teamStripRenderedLeague='',teamStripRenderedNames='';
 function updateTeamStrip(){
  const strip=$('dbTeamLogoStrip');if(!strip)return;
  const normalizeName=name=>String(name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/gi,'').toLowerCase();
- const local=activeBrand==='usports'?{'UBC Thunderbirds':'ubc-thunderbirds.webp'}:
- activeBrand==='ahl'?{...(window.RinkboardLocalLogoFiles?.ahl||{}),'San Jose Barracuda':'san-jose-barracuda.webp'}:
+ const local=activeBrand==='usports'?{'UBC Thunderbirds':'ubc-thunderbirds.png'}:
+ activeBrand==='ahl'?{...(window.RinkboardLocalLogoFiles?.ahl||{}),'San Jose Barracuda':'san-jose-barracuda.png'}:
  (window.RinkboardLocalLogoFiles?.[activeBrand]||{});
  const snapshot=window.RinkboardLocalTeams?.[activeBrand]||[];
  const discovered=databaseTeamNames();
