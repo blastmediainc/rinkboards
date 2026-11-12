@@ -417,6 +417,8 @@ async function exportSelected(){
   const data=parseSavedProject(await download(record.path),record);
   if(!data.project||!Array.isArray(data.project.boards)||!data.project.boards[0])throw Error('Invalid database project: '+record.name);
   const board=JSON.parse(JSON.stringify(data.project.boards[0]));
+  // Existing copies may still contain their source team's proof header.
+  board.settings.project=record.team+' / '+record.season;
   const qty=exportQuantities.get(record.path)??1;
   if(!Number.isSafeInteger(qty)||qty<1||qty>500)throw Error('Invalid export quantity for '+record.name+' (1–500)');
   board.settings.qty=String(qty);
@@ -585,6 +587,16 @@ async function openShareTeams(){
  }
  shareStatus('Select one or more teams, then click Copy to Selected Teams.');
 }
+// V216: A saved board's proof header must reflect its destination team,
+// not the source team that originally authored the artwork.
+function retargetProofTeam(project,team,season){
+ if(!project||!Array.isArray(project.boards))return project;
+ const label=String(team||'').trim()+' / '+String(season||'').trim();
+ for(const board of project.boards){
+  if(board&&board.settings)board.settings.project=label;
+ }
+ return project;
+}
 async function copyShareTeams(){
  const targets=[...document.querySelectorAll('#dbShareTeamsDest .dbShareTarget:checked')].map(c=>({def:shareLeagueDefs.find(d=>d.key===c.dataset.league),team:c.dataset.team}));
  if(!targets.length){shareStatus('Select at least one destination team.');return}
@@ -606,7 +618,7 @@ async function copyShareTeams(){
      shareStatus('Copying '+(copied+skipped+errors.length+1)+' / '+total+': '+record.name+' → '+target.def.label+' / '+target.team);
      await ensureFolders(folder);
      // Use add mode: never overwrite an existing project in a destination team.
-     const payload={...source,team:target.team,season:record.season,sponsor:record.name,width:record.width,updatedAt:new Date().toISOString()};
+     const payload={...source,project:retargetProofTeam(source.project,target.team,record.season),team:target.team,season:record.season,sponsor:record.name,width:record.width,updatedAt:new Date().toISOString()};
      await upload(destination,JSON.stringify(payload),null,false);
      copied++;
      if(preview!==null){try{await upload(destination.replace(/\.rinkboard\.json$/i,'.preview.svg'),preview,null,false)}catch(e){console.warn('Shared project, but preview could not be copied',destination,e);errors.push(record.name+' → '+target.team+': preview unavailable')}}
@@ -688,7 +700,7 @@ async function rebuildSelectedPreviews(){
  message('Refreshed '+ok+' / '+targets.length+' selected previews.'+(failed.length?' Failed: '+failed.slice(0,3).join('; ')+(failed.length>3?' (+'+(failed.length-3)+' more; see browser console)':''):''));
 }
 
-async function openRecord(record){let data=parseSavedProject(await download(record.path),record);if(!data.project||!Array.isArray(data.project.boards))throw Error('This is not a valid Rinkboard Builder database entry');if(!confirm(`Open ${record.name} in the editor? Unsaved edits in the current project will be lost.`))return;window.RinkboardBridge.openProject(data.project);selectedRecord=record;if($('dbLeagueWide'))$('dbLeagueWide').checked=isLeague(record);if($('builderLeagueWide'))$('builderLeagueWide').checked=isLeague(record);if(!isLeague(record)){$('dbTeam').value=record.team;$('dbSeason').value=record.season;}builderChoices();if(!isLeague(record)){$('builderTeam').value=record.team;builderChoices();}$('builderSeason').value=record.season;syncBuilderProjectSeason();updateTeamStrip();$('dbOverlay').hidden=true;message(`Opened ${record.name}. Save Current Artboard to update it in Dropbox.`)}
+async function openRecord(record){let data=parseSavedProject(await download(record.path),record);if(!data.project||!Array.isArray(data.project.boards))throw Error('This is not a valid Rinkboard Builder database entry');if(!confirm(`Open ${record.name} in the editor? Unsaved edits in the current project will be lost.`))return;window.RinkboardBridge.openProject(retargetProofTeam(data.project,record.team,record.season));selectedRecord=record;if($('dbLeagueWide'))$('dbLeagueWide').checked=isLeague(record);if($('builderLeagueWide'))$('builderLeagueWide').checked=isLeague(record);if(!isLeague(record)){$('dbTeam').value=record.team;$('dbSeason').value=record.season;}builderChoices();if(!isLeague(record)){$('builderTeam').value=record.team;builderChoices();}$('builderSeason').value=record.season;syncBuilderProjectSeason();updateTeamStrip();$('dbOverlay').hidden=true;message(`Opened ${record.name}. Save Current Artboard to update it in Dropbox.`)}
 // V134 — explicit, non-destructive Dropbox league migration. Originals stay until user verifies.
 async function migrateLegacyLeagueFolders(){
  if(expired())throw Error('Connect Dropbox before migrating.');
