@@ -48,6 +48,7 @@ async function loadLogo(team){
  const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/gi,'').toLowerCase();
  const localGroup=window.RinkboardLocalLogoFiles?.[league]||{};
  const requested=norm(team);
+ if(league==='misc'&&requested==='sunpeaksresort')return 'sun-peaks-resort.png';
  if(league==='usports'&&requested==='ubcthunderbirds')return 'ubc-thunderbirds.png';
  if(league==='ahl'&&requested==='sanjosebarracuda')return 'san-jose-barracuda.png';
  for(const [teamName,filePath] of Object.entries(localGroup)){

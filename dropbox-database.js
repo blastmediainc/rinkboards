@@ -30,19 +30,20 @@ const NCAA_ROOT_KEY='rinkboard-ncaa-root-v137';
 const NLL_ROOT_KEY='rinkboard-nll-root-v140';
 const NLL_TEAMS=['Vancouver Warriors']; const USPORTS_ROOT_KEY='rinkboard-usports-root-v193'; const USPORTS_TEAMS=['UBC Thunderbirds'];
 const NCAA_TEAM='University of Wisconsin Badgers';
+const MISC_ROOT_KEY='rinkboard-misc-root-v217'; const MISC_TEAMS=['Sun Peaks Resort'];
 
 const NHL_ROOT_KEY='rinkboard-nhl-root-v134', AHL_ROOT_KEY='rinkboard-ahl-root-v134';
 const BCHL_TEAMS = ["Alberni Valley Bulldogs", "Cowichan Valley Capitals", "Nanaimo Clippers", "Powell River Kings", "Victoria Grizzlies", "Chilliwack Chiefs", "Coquitlam Express", "Langley Rivermen", "Prince George Spruce Kings", "Surrey Eagles", "Cranbrook Bucks", "Salmon Arm Silverbacks", "Trail Smoke Eaters", "Vernon Vipers", "West Kelowna Warriors", "Blackfalds Bulldogs", "Brooks Bandits", "Okotoks Oilers", "Sherwood Park Crusaders", "Spruce Grove Saints"];
 const bchlRootKey='rinkboard-bchl-root-v88';
 const brandKey='rinkboard-active-brand-v85';
-let activeBrand=['bchl','pwhl','nhl','ahl','ncaa','nll','usports'].includes(localStorage.getItem(brandKey))?localStorage.getItem(brandKey):'blast';
+let activeBrand=['bchl','pwhl','nhl','ahl','ncaa','nll','usports','misc'].includes(localStorage.getItem(brandKey))?localStorage.getItem(brandKey):'blast';
 let blastFolder=config.folder||'/Rinkboard Database';
-function brandRoot(){return activeBrand==='bchl'?(localStorage.getItem(bchlRootKey)||'/BCHL Rinkboards'):activeBrand==='pwhl'?(localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards'):activeBrand==='nhl'?(localStorage.getItem(NHL_ROOT_KEY)||'/NHL Rinkboards'):activeBrand==='ahl'?(localStorage.getItem(AHL_ROOT_KEY)||'/AHL Rinkboards'):activeBrand==='ncaa'?(localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards'):activeBrand==='nll'?(localStorage.getItem(NLL_ROOT_KEY)||'/NLL Rinkboards'):activeBrand==='usports'?(localStorage.getItem(USPORTS_ROOT_KEY)||'/USports Rinkboards'):blastFolder}
-function presetTeams(){return activeBrand==='bchl'?BCHL_TEAMS:activeBrand==='pwhl'?PWHL_TEAMS:activeBrand==='ahl'?['Abbotsford Canucks','San Jose Barracuda']:activeBrand==='ncaa'?[NCAA_TEAM]:activeBrand==='nll'?NLL_TEAMS:activeBrand==='usports'?USPORTS_TEAMS:[]}
+function brandRoot(){return activeBrand==='bchl'?(localStorage.getItem(bchlRootKey)||'/BCHL Rinkboards'):activeBrand==='pwhl'?(localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards'):activeBrand==='nhl'?(localStorage.getItem(NHL_ROOT_KEY)||'/NHL Rinkboards'):activeBrand==='ahl'?(localStorage.getItem(AHL_ROOT_KEY)||'/AHL Rinkboards'):activeBrand==='ncaa'?(localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards'):activeBrand==='nll'?(localStorage.getItem(NLL_ROOT_KEY)||'/NLL Rinkboards'):activeBrand==='usports'?(localStorage.getItem(USPORTS_ROOT_KEY)||'/USports Rinkboards'):activeBrand==='misc'?(localStorage.getItem(MISC_ROOT_KEY)||'/Misc Rinkboards'):blastFolder}
+function presetTeams(){return activeBrand==='bchl'?BCHL_TEAMS:activeBrand==='pwhl'?PWHL_TEAMS:activeBrand==='ahl'?['Abbotsford Canucks','San Jose Barracuda']:activeBrand==='ncaa'?[NCAA_TEAM]:activeBrand==='nll'?NLL_TEAMS:activeBrand==='usports'?USPORTS_TEAMS:activeBrand==='misc'?MISC_TEAMS:[]}
 config.folder=brandRoot();
 function updateLeagueControl(){const label=$('dbLeagueWideLabel');if(label)label.style.display='flex';const builder=$('builderLeagueWideLabel');if(builder)builder.style.display='inline-flex'}
 async function switchDatabaseBrand(next){
- next=['bchl','pwhl','nhl','ahl','ncaa','nll','usports'].includes(next)?next:'blast';
+ next=['bchl','pwhl','nhl','ahl','ncaa','nll','usports','misc'].includes(next)?next:'blast';
  if(next===activeBrand)return;
  activeBrand=next;config.folder=brandRoot();if($('dbLeagueWide'))$('dbLeagueWide').checked=false;if($('builderLeagueWide'))$('builderLeagueWide').checked=false;updateLeagueControl();$('dbFolder').value=config.folder;
  entries=[];selectedRecord=null;selectedPaths.clear();exportQuantities.clear();visibleRecords=[];
@@ -50,7 +51,7 @@ async function switchDatabaseBrand(next){
  $('dbTeam').value='';$('dbSeason').value='';$('dbSize').value='all';
  $('builderTeam').value='';$('builderSeason').value='';
  builderChoices();render();groupRender();
- message(activeBrand==='bchl'?'BCHL: select a team and season, or add a new one.':activeBrand==='pwhl'?'PWHL: select a team and season, or add a new one.':activeBrand==='nhl'?'NHL database selected.':activeBrand==='ahl'?'AHL database selected.':activeBrand==='ncaa'?'NCAA database selected.':activeBrand==='nll'?'NLL database selected.':activeBrand==='usports'?'USports database selected.':'Legacy Blast Media database selected.');
+ message(activeBrand==='bchl'?'BCHL: select a team and season, or add a new one.':activeBrand==='pwhl'?'PWHL: select a team and season, or add a new one.':activeBrand==='nhl'?'NHL database selected.':activeBrand==='ahl'?'AHL database selected.':activeBrand==='ncaa'?'NCAA database selected.':activeBrand==='nll'?'NLL database selected.':activeBrand==='usports'?'USports database selected.':activeBrand==='misc'?'Misc database selected.':'Legacy Blast Media database selected.');
  if(!expired())await refresh();
 }
 
@@ -178,7 +179,7 @@ let teamStripRenderedLeague='',teamStripRenderedNames='';
 function updateTeamStrip(){
  const strip=$('dbTeamLogoStrip');if(!strip)return;
  const normalizeName=name=>String(name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/gi,'').toLowerCase();
- const local=activeBrand==='usports'?{'UBC Thunderbirds':'ubc-thunderbirds.png'}:
+ const local=activeBrand==='misc'?{'Sun Peaks Resort':'sun-peaks-resort.png'}:activeBrand==='usports'?{'UBC Thunderbirds':'ubc-thunderbirds.png'}:
  activeBrand==='ahl'?{...(window.RinkboardLocalLogoFiles?.ahl||{}),'San Jose Barracuda':'san-jose-barracuda.png'}:
  (window.RinkboardLocalLogoFiles?.[activeBrand]||{});
  const snapshot=window.RinkboardLocalTeams?.[activeBrand]||[];
@@ -249,7 +250,7 @@ function builderChoices(){
  const teams=distinctTeams([...entries.filter(e=>!isLeague(e)&&e.team!=='Team Logos').map(e=>e.team),...[...folderChoices.teams].filter(t=>t!=='Team Logos'&&((activeBrand!=='bchl'&&activeBrand!=='pwhl')||t!==LEAGUE_TEAM)),...presetTeams()]);
  setOptions('builderTeam',teams,selectedTeam,'','Select team…');
  const team=teamEl.value;
- const seasons=team?[...new Set([...entries.filter(e=>inTeam(e,team)).map(e=>e.season),...[...folderChoices.seasons].filter(x=>canonicalTeam(x.split('/')[0])===canonicalTeam(team)).map(x=>x.slice(x.indexOf('/')+1))])].sort((a,b)=>a.localeCompare(b)):[];
+ const seasons=team?[...new Set([...(activeBrand==='misc'&&team==='Sun Peaks Resort'?['2026']:[]),...entries.filter(e=>inTeam(e,team)).map(e=>e.season),...[...folderChoices.seasons].filter(x=>canonicalTeam(x.split('/')[0])===canonicalTeam(team)).map(x=>x.slice(x.indexOf('/')+1))])].sort((a,b)=>a.localeCompare(b)):[];
  setOptions('builderSeason',seasons,selectedSeason,'','Select season…');
  updateTeamStrip();
 }
@@ -554,7 +555,8 @@ const shareLeagueDefs=[
  {key:'pwhl',label:'PWHL',root:()=>localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards',preset:PWHL_TEAMS},
  {key:'nll',label:'NLL',root:()=>localStorage.getItem(NLL_ROOT_KEY)||'/NLL Rinkboards',preset:NLL_TEAMS},
  {key:'usports',label:'USports',root:()=>localStorage.getItem(USPORTS_ROOT_KEY)||'/USports Rinkboards',preset:USPORTS_TEAMS},
- {key:'ncaa',label:'NCAA',root:()=>localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards',preset:[NCAA_TEAM]}
+ {key:'ncaa',label:'NCAA',root:()=>localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards',preset:[NCAA_TEAM]},
+ {key:'misc',label:'Misc.',root:()=>localStorage.getItem(MISC_ROOT_KEY)||'/Misc Rinkboards',preset:MISC_TEAMS}
 ];
 let shareRecords=[];
 const shareUI=id=>$(id);
@@ -992,7 +994,8 @@ const GLOBAL_LEAGUES=[
  {id:'pwhl',label:'PWHL',root:()=>localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards'},
  {id:'ncaa',label:'NCAA',root:()=>localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards'},
  {id:'nll',label:'NLL',root:()=>localStorage.getItem(NLL_ROOT_KEY)||'/NLL Rinkboards'},
- {id:'usports',label:'USports',root:()=>localStorage.getItem(USPORTS_ROOT_KEY)||'/USports Rinkboards'}
+ {id:'usports',label:'USports',root:()=>localStorage.getItem(USPORTS_ROOT_KEY)||'/USports Rinkboards'},
+ {id:'misc',label:'Misc.',root:()=>localStorage.getItem(MISC_ROOT_KEY)||'/Misc Rinkboards'}
 ];
 const globalTeams=new Map();
 const normalizeGlobal=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
@@ -1009,7 +1012,7 @@ function seedGlobalTeams(){
   const preset=league.id==='ahl'?['Abbotsford Canucks','San Jose Barracuda']:
    league.id==='bchl'?BCHL_TEAMS:league.id==='pwhl'?PWHL_TEAMS:
    league.id==='nll'?NLL_TEAMS:league.id==='usports'?USPORTS_TEAMS:
-   league.id==='ncaa'?[NCAA_TEAM]:[];
+   league.id==='ncaa'?[NCAA_TEAM]:league.id==='misc'?MISC_TEAMS:[];
   for(const team of [...known,...preset])globalAdd(team,league);
  }
 }

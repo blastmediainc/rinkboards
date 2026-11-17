@@ -73,3 +73,7 @@ window.RinkboardLocalTeams={
   "Vancouver Warriors"
  ]
 };
+
+window.RinkboardLocalLogoFiles.misc=Object.assign({},window.RinkboardLocalLogoFiles.misc||{}, {"Sun Peaks Resort":"sun-peaks-resort.png"});
+window.RinkboardLocalTeams=window.RinkboardLocalTeams||{};
+window.RinkboardLocalTeams.misc=[...new Set([...(window.RinkboardLocalTeams.misc||[]),"Sun Peaks Resort"])];
