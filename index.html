@@ -634,6 +634,48 @@ async function imposedProductionPdf(targetDoc=null,layerRefs=null){
  const layers=layerRefs||productionLayers(output);
  // V71: preserve original embedded PDF vectors instead of flattening all art.
  // Output may contain RGB objects. Convert RGB to CMYK in Acrobat before printing.
+ // V221: jsPDF supplies all 14 standard fonts in page resources even for
+ // vector-only artwork. When embedPage wraps the page in a Form XObject,
+ // those unembedded Helvetica references survive and can cause Illustrator
+ // Place to fail on clipped artwork. Remove them ONLY for text-free streams.
+ // Never modify a form that contains live PDF text or cannot be decoded.
+ function removeUnusedSourceFonts(pdf,page){
+  const N=PDFLib.PDFName;
+  const visited=new Set();
+  function lookup(v){try{return pdf.context.lookup(v)}catch(_){return null}}
+  function streamHasText(st){
+   if(!st)return true;
+   try{
+    let bytes;
+    if(st instanceof PDFLib.PDFRawStream)bytes=PDFLib.decodePDFRawStream(st).decode();
+    else if(st instanceof PDFLib.PDFContentStream)bytes=st.getContents();
+    else return true;
+    const ascii=Array.from(bytes,b=>String.fromCharCode(b)).join('');
+    return /(?:^|\s)BT(?:\s|$)/.test(ascii);
+   }catch(_){return true}
+  }
+  function check(ref,inherit){
+   const st=lookup(ref);if(!st||visited.has(st))return;
+   visited.add(st);
+   const res=lookup(st.dict&&st.dict.get(N.of('Resources')))||inherit;
+   if(!(res instanceof PDFLib.PDFDict))return;
+   if(!streamHasText(st))res.delete(N.of('Font'));
+   const xobjects=lookup(res.get(N.of('XObject')));
+   if(xobjects instanceof PDFLib.PDFDict)
+    for(const key of xobjects.keys())check(xobjects.get(key),res);
+  }
+  const res=page.node.normalizedEntries().Resources;
+  const contents=lookup(page.node.get(N.of('Contents')));
+  let textFound=false;
+  if(contents instanceof PDFLib.PDFArray){
+   for(let i=0;i<contents.size();i++)if(streamHasText(lookup(contents.get(i))))textFound=true;
+  }else textFound=streamHasText(contents);
+  if(!textFound)res.delete(N.of('Font'));
+  const xobjects=lookup(res.get(N.of('XObject')));
+  if(xobjects instanceof PDFLib.PDFDict)
+   for(const key of xobjects.keys())check(xobjects.get(key),res);
+ }
+ removeUnusedSourceFonts(input,sourcePage);
  const embeddedPage=await output.embedPage(sourcePage);
  const embeddedRef=embeddedPage.ref;
  // V183: Quantity determines the copy count in the filename, not repeated sheets.
