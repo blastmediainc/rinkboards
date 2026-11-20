@@ -497,40 +497,45 @@ function smallPreviewJpeg(svg){return new Promise((resolve,reject)=>{
  source.onerror=()=>{URL.revokeObjectURL(url);reject(Error('Thumbnail SVG could not load'))};
  source.src=url;
 })}
+// V227: Render Dropbox SVG previews directly. Firefox can deny canvas pixel access
+// when an SVG references embedded artwork, even though <img> can display it.
+// Reuse one downloaded SVG string per path, not a canvas-derived JPEG.
 async function loadPreview(tile,record){
  const path=record.path.replace(/\.rinkboard\.json$/i,'.preview.svg');
  try{
   let pending=hoverPreviewCache.get(path);
   if(!pending){
-   pending=enqueuePreview(async()=>smallPreviewJpeg(await download(path)));
+   pending=enqueuePreview(()=>download(path));
    hoverPreviewCache.set(path,pending);
   }
-  const thumbnail=await pending;
+  const svg=await pending;
   if(!tile.isConnected)return;
-  const img=document.createElement('img');img.alt=record.name;img.decoding='async';
-  img.src=thumbnail;img.style.cssText='display:block;width:100%;height:auto;object-fit:contain';
-  img.onerror=()=>{img.remove();hoverPreviewCache.delete(path);loadPreviewFallback(tile,record,path)};
+  if(!/^\s*(?:<\?xml[^>]*>\s*)?<svg[\s>]/i.test(svg))throw Error('Preview is not valid SVG');
+  const url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml;charset=utf-8'}));
+  const img=document.createElement('img');
+  img.alt=record.name;
+  img.decoding='async';
+  img.style.cssText='display:block;width:100%;height:100%;object-fit:contain';
+  let released=false;
+  const release=()=>{if(!released){released=true;URL.revokeObjectURL(url)}};
+  img.onload=release;
+  img.onerror=()=>{
+   release();img.remove();hoverPreviewCache.delete(path);
+   showPreviewUnavailable(tile,record);
+  };
   tile.prepend(img);
- }catch(e){hoverPreviewCache.delete(path);console.warn('Thumbnail conversion unavailable; trying original SVG',record.name,e);await loadPreviewFallback(tile,record,path)}
-}
-async function loadPreviewFallback(tile,record,path){
- try{
-  const svg=await download(path);
-  if(!tile.isConnected)return;
-  const blob=new Blob([svg],{type:'image/svg+xml;charset=utf-8'});
-  const url=URL.createObjectURL(blob);
-  const img=document.createElement('img');img.alt=record.name;
-  img.style.cssText='display:block;width:100%;height:auto;object-fit:contain';
-  img.onload=()=>URL.revokeObjectURL(url);
-  img.onerror=()=>{URL.revokeObjectURL(url);img.remove();showPreviewUnavailable(tile,record)};
-  img.src=url;tile.prepend(img);
- }catch(e){console.warn('Saved preview unavailable',record.name,e);showPreviewUnavailable(tile,record)}
+  img.src=url;
+ }catch(e){
+  hoverPreviewCache.delete(path);
+  console.warn('Database preview unavailable:',record.name,e);
+  showPreviewUnavailable(tile,record);
+ }
 }
 function showPreviewUnavailable(tile,record){
  if(!tile.isConnected||tile.querySelector('.db-preview-unavailable'))return;
  const note=document.createElement('div');note.className='db-preview-unavailable';
  note.style.cssText='padding:10px;text-align:center;font-size:12px;color:#777';
- note.textContent='Preview unavailable — select and refresh preview';
+ note.textContent='Preview unavailable — refresh preview';
  tile.prepend(note);
 }
 function activeBoard(){let obj=window.RinkboardBridge.getProject();return {obj,board:obj.boards[obj.activeBoard]}}
