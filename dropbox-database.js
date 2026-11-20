@@ -403,6 +403,67 @@ async function deleteSelected(chosen){
  try{await refresh()}catch(err){failed.push('Refresh: '+err.message)}
  message(`Deleted ${removed} of ${chosen.length} rinkboard(s) from Dropbox.${failed.length?' Errors: '+failed.slice(0,3).join(' | '):''}`);
 }
+const proofTeamCodes = new Map([
+ ['ANA','Anaheim Ducks'], ['BOS','Boston Bruins','Boston Fleet'], ['BUF','Buffalo Sabres'],
+ ['CAR','Carolina Hurricanes'], ['CBJ','Columbus Blue Jackets'], ['CGY','Calgary Flames'],
+ ['CHI','Chicago Blackhawks'], ['COL','Colorado Avalanche'], ['DAL','Dallas Stars'],
+ ['DET','Detroit Red Wings','Detroit Clutch'], ['EDM','Edmonton Oilers'], ['FLA','Florida Panthers'],
+ ['LAK','Los Angeles Kings','LA Kings','L.A. Kings'], ['MIN','Minnesota Wild','Minnesota Frost'],
+ ['MTL','Montreal Canadiens','Montréal Victoire'], ['NJD','New Jersey Devils'],
+ ['NSH','Nashville Predators'], ['NYI','New York Islanders'], ['NYR','New York Rangers'],
+ ['OTT','Ottawa Senators','Ottawa Charge'], ['PHI','Philadelphia Flyers'], ['PIT','Pittsburgh Penguins'],
+ ['SEA','Seattle Kraken','Seattle Torrent'], ['SJS','San Jose Sharks'], ['STL','St Louis Blues'],
+ ['TBL','Tampa Bay Lightning'], ['TOR','Toronto Maple Leafs','Toronto Sceptres'],
+ ['UTA','Utah Mammoth','Utah Hockey Club'], ['VAN','Vancouver Canucks','Vancouver Goldeneyes','Vancouver Warriors'],
+ ['VGK','Vegas Golden Knights','Las Vegas Golden Knights'], ['WPG','Winnipeg Jets'], ['WSH','Washington Capitals'],
+ ['ARI','Arizona Coyotes'], ['ABB','Abbotsford Canucks'], ['SJB','San Jose Barracuda'],
+ ['NYS','New York Sirens'], ['HAM','Hamilton Havoc'], ['LVV','Vegas Vanguards'], ['SJL','San Jose Sea Lions'],
+ ['WIS','University of Wisconsin Badgers','Wisconsin Badgers'], ['UBC','UBC Thunderbirds'],
+ ['AVB','Alberni Valley Bulldogs'], ['CVC','Cowichan Valley Capitals'],
+ ['NAN','Nanaimo Clippers'], ['PRK','Powell River Kings'], ['VIC','Victoria Grizzlies'],
+ ['CHI','Chilliwack Chiefs'], ['COQ','Coquitlam Express'], ['LAN','Langley Rivermen'],
+ ['PGS','Prince George Spruce Kings'], ['SUR','Surrey Eagles'], ['CRA','Cranbrook Bucks'],
+ ['SAS','Salmon Arm Silverbacks'], ['TSE','Trail Smoke Eaters'], ['VER','Vernon Vipers'],
+ ['WKW','West Kelowna Warriors'], ['BLA','Blackfalds Bulldogs'], ['BRO','Brooks Bandits'],
+ ['OKO','Okotoks Oilers'], ['SPC','Sherwood Park Crusaders'], ['SGS','Spruce Grove Saints'],
+ ['SPR','Sun Peaks Resort'], ['LGE','League-Wide']
+].flatMap(([code,...names])=>names.map(name=>[pwhlTeamKey(name),code])));
+
+function proofTeamCode(value){
+ const team=String(value||'').trim();
+ const key=pwhlTeamKey(team);
+ const code=proofTeamCodes.get(pwhlTeamKey(canonicalPWHLTeam(team)));
+ if(code?.length===3)return code;
+ if(/^[A-Z]{3}$/.test(team))return team;
+ const initials=team.split(/[\s-]+/).map(word=>pwhlTeamKey(word)[0]||'').join('');
+ return (initials.length>=3?initials:key).slice(0,3).toUpperCase()||'UNK';
+}
+function proofSeasonLabel(value){
+ const season=String(value||'').trim();
+ const range=season.match(/^((?:19|20)?\d{2})\s*[.\/\-–—]\s*((?:19|20)?\d{2})$/);
+ if(range)return range.slice(1).map(year=>year.slice(-2)).join('.');
+ return /^(?:19|20)?\d{2}$/.test(season)?season.slice(-2):sanitize(season||'Season');
+}
+function proofPdfName(records){
+ const common=(values,fallback)=>new Set(values).size===1?values[0]:fallback;
+ const team=common(records.map(record=>proofTeamCode(record.team)),'MultipleTeams');
+ const season=common(records.map(record=>proofSeasonLabel(record.season)),'MultipleSeasons');
+ const brand=common(records.map(record=>sanitize(record.name)),'MultipleBrands');
+ return team+'_Rinkboard'+season+'_'+brand+'.pdf';
+}
+window.RinkboardProofName = function(boards){
+ const selectedTeam=$('builderTeam')?.value;
+ const selectedSeason=$('builderSeason')?.value;
+ return proofPdfName(boards.map(({settings})=>{
+  const match=String(settings.project||'').trim().match(/^(.*?)\s+\/\s+(.+)$/);
+  return {
+   team:match?.[1]||(selectedTeam==='__add__'?'':selectedTeam),
+   season:match?.[2]||(selectedSeason==='__add__'?'':selectedSeason),
+   name:settings.sponsor
+  };
+ }));
+};
+
 async function exportSelected(){
  const proof=$('dbExportProof').checked,production=$('dbExportProduction').checked;
  if(!proof&&!production)throw Error('Choose Proof PDFs, Production PDFs, or both.');
@@ -410,6 +471,7 @@ async function exportSelected(){
  if(!chosen.length)throw Error('Select at least one artboard using the checkboxes.');
  const contact=$('dbExportContact').value.trim();
  const proofBoards=[];
+ const selectedTeam=$('dbTeam').value;
  let exported=0;
  const zipNeeded=production&&chosen.length>1;
  const zip=zipNeeded?(window.JSZip?new window.JSZip():(()=>{throw Error("ZIP library unavailable. Check your internet connection and reload the builder.")})()):null;
@@ -437,12 +499,13 @@ async function exportSelected(){
  }
  if(proof){
   message('Generating combined proof PDF for '+proofBoards.length+' artboard(s)…');
-  const common=(field,fallback)=>chosen.every(r=>r[field]===chosen[0][field])?chosen[0][field]:fallback;
-  const proofStem=chosen.length===1
-   ?[chosen[0].team,chosen[0].season,chosen[0].name,chosen[0].size].map(sanitize).join('_')
-   :[common('team','MultipleTeams'),common('season','MultipleSeasons'),'Selected-'+chosen.length+'-Artboards',common('size','MixedSizes')].map(sanitize).join('_');
+  const proofName=proofPdfName(chosen.map(record=>({
+   team:isLeague(record)?(selectedTeam||record.team):record.team,
+   season:record.season,
+   name:record.name
+  })));
   const bytes=await window.RinkboardBridge.exportDatabaseSelection(proofBoards,true);
-  if(zip)zip.file(proofStem+'_Proof.pdf',bytes);else downloadPdf(bytes,proofStem+'_Proof.pdf');
+  if(zip)zip.file(proofName,bytes);else downloadPdf(bytes,proofName);
  }
  if(zip){
   message('Compressing '+exported+' production PDFs'+(proof?' and combined proof':'')+' into ZIP…');
