@@ -30,20 +30,19 @@ const NCAA_ROOT_KEY='rinkboard-ncaa-root-v137';
 const NLL_ROOT_KEY='rinkboard-nll-root-v140';
 const NLL_TEAMS=['Vancouver Warriors']; const USPORTS_ROOT_KEY='rinkboard-usports-root-v193'; const USPORTS_TEAMS=['UBC Thunderbirds'];
 const NCAA_TEAM='University of Wisconsin Badgers';
-const MISC_ROOT_KEY='rinkboard-misc-root-v217'; const MISC_TEAMS=['Sun Peaks Resort'];
 
 const NHL_ROOT_KEY='rinkboard-nhl-root-v134', AHL_ROOT_KEY='rinkboard-ahl-root-v134';
 const BCHL_TEAMS = ["Alberni Valley Bulldogs", "Cowichan Valley Capitals", "Nanaimo Clippers", "Powell River Kings", "Victoria Grizzlies", "Chilliwack Chiefs", "Coquitlam Express", "Langley Rivermen", "Prince George Spruce Kings", "Surrey Eagles", "Cranbrook Bucks", "Salmon Arm Silverbacks", "Trail Smoke Eaters", "Vernon Vipers", "West Kelowna Warriors", "Blackfalds Bulldogs", "Brooks Bandits", "Okotoks Oilers", "Sherwood Park Crusaders", "Spruce Grove Saints"];
 const bchlRootKey='rinkboard-bchl-root-v88';
 const brandKey='rinkboard-active-brand-v85';
-let activeBrand=['bchl','pwhl','nhl','ahl','ncaa','nll','usports','misc'].includes(localStorage.getItem(brandKey))?localStorage.getItem(brandKey):'blast';
+let activeBrand=['bchl','pwhl','nhl','ahl','ncaa','nll','usports'].includes(localStorage.getItem(brandKey))?localStorage.getItem(brandKey):'blast';
 let blastFolder=config.folder||'/Rinkboard Database';
-function brandRoot(){return activeBrand==='bchl'?(localStorage.getItem(bchlRootKey)||'/BCHL Rinkboards'):activeBrand==='pwhl'?(localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards'):activeBrand==='nhl'?(localStorage.getItem(NHL_ROOT_KEY)||'/NHL Rinkboards'):activeBrand==='ahl'?(localStorage.getItem(AHL_ROOT_KEY)||'/AHL Rinkboards'):activeBrand==='ncaa'?(localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards'):activeBrand==='nll'?(localStorage.getItem(NLL_ROOT_KEY)||'/NLL Rinkboards'):activeBrand==='usports'?(localStorage.getItem(USPORTS_ROOT_KEY)||'/USports Rinkboards'):activeBrand==='misc'?(localStorage.getItem(MISC_ROOT_KEY)||'/Misc Rinkboards'):blastFolder}
-function presetTeams(){return activeBrand==='bchl'?BCHL_TEAMS:activeBrand==='pwhl'?PWHL_TEAMS:activeBrand==='ahl'?['Abbotsford Canucks','San Jose Barracuda']:activeBrand==='ncaa'?[NCAA_TEAM]:activeBrand==='nll'?NLL_TEAMS:activeBrand==='usports'?USPORTS_TEAMS:activeBrand==='misc'?MISC_TEAMS:[]}
+function brandRoot(){return activeBrand==='bchl'?(localStorage.getItem(bchlRootKey)||'/BCHL Rinkboards'):activeBrand==='pwhl'?(localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards'):activeBrand==='nhl'?(localStorage.getItem(NHL_ROOT_KEY)||'/NHL Rinkboards'):activeBrand==='ahl'?(localStorage.getItem(AHL_ROOT_KEY)||'/AHL Rinkboards'):activeBrand==='ncaa'?(localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards'):activeBrand==='nll'?(localStorage.getItem(NLL_ROOT_KEY)||'/NLL Rinkboards'):activeBrand==='usports'?(localStorage.getItem(USPORTS_ROOT_KEY)||'/USports Rinkboards'):blastFolder}
+function presetTeams(){return activeBrand==='bchl'?BCHL_TEAMS:activeBrand==='pwhl'?PWHL_TEAMS:activeBrand==='ahl'?['Abbotsford Canucks','San Jose Barracuda']:activeBrand==='ncaa'?[NCAA_TEAM]:activeBrand==='nll'?NLL_TEAMS:activeBrand==='usports'?USPORTS_TEAMS:[]}
 config.folder=brandRoot();
 function updateLeagueControl(){const label=$('dbLeagueWideLabel');if(label)label.style.display='flex';const builder=$('builderLeagueWideLabel');if(builder)builder.style.display='inline-flex'}
 async function switchDatabaseBrand(next){
- next=['bchl','pwhl','nhl','ahl','ncaa','nll','usports','misc'].includes(next)?next:'blast';
+ next=['bchl','pwhl','nhl','ahl','ncaa','nll','usports'].includes(next)?next:'blast';
  if(next===activeBrand)return;
  activeBrand=next;config.folder=brandRoot();if($('dbLeagueWide'))$('dbLeagueWide').checked=false;if($('builderLeagueWide'))$('builderLeagueWide').checked=false;updateLeagueControl();$('dbFolder').value=config.folder;
  entries=[];selectedRecord=null;selectedPaths.clear();exportQuantities.clear();visibleRecords=[];
@@ -51,7 +50,7 @@ async function switchDatabaseBrand(next){
  $('dbTeam').value='';$('dbSeason').value='';$('dbSize').value='all';
  $('builderTeam').value='';$('builderSeason').value='';
  builderChoices();render();groupRender();
- message(activeBrand==='bchl'?'BCHL: select a team and season, or add a new one.':activeBrand==='pwhl'?'PWHL: select a team and season, or add a new one.':activeBrand==='nhl'?'NHL database selected.':activeBrand==='ahl'?'AHL database selected.':activeBrand==='ncaa'?'NCAA database selected.':activeBrand==='nll'?'NLL database selected.':activeBrand==='usports'?'USports database selected.':activeBrand==='misc'?'Misc database selected.':'Legacy Blast Media database selected.');
+ message(activeBrand==='bchl'?'BCHL: select a team and season, or add a new one.':activeBrand==='pwhl'?'PWHL: select a team and season, or add a new one.':activeBrand==='nhl'?'NHL database selected.':activeBrand==='ahl'?'AHL database selected.':activeBrand==='ncaa'?'NCAA database selected.':activeBrand==='nll'?'NLL database selected.':activeBrand==='usports'?'USports database selected.':'Legacy Blast Media database selected.');
  if(!expired())await refresh();
 }
 
@@ -179,7 +178,7 @@ let teamStripRenderedLeague='',teamStripRenderedNames='';
 function updateTeamStrip(){
  const strip=$('dbTeamLogoStrip');if(!strip)return;
  const normalizeName=name=>String(name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/gi,'').toLowerCase();
- const local=activeBrand==='misc'?{'Sun Peaks Resort':'sun-peaks-resort.png'}:activeBrand==='usports'?{'UBC Thunderbirds':'ubc-thunderbirds.png'}:
+ const local=activeBrand==='usports'?{'UBC Thunderbirds':'ubc-thunderbirds.png'}:
  activeBrand==='ahl'?{...(window.RinkboardLocalLogoFiles?.ahl||{}),'San Jose Barracuda':'san-jose-barracuda.png'}:
  (window.RinkboardLocalLogoFiles?.[activeBrand]||{});
  const snapshot=window.RinkboardLocalTeams?.[activeBrand]||[];
@@ -250,7 +249,7 @@ function builderChoices(){
  const teams=distinctTeams([...entries.filter(e=>!isLeague(e)&&e.team!=='Team Logos').map(e=>e.team),...[...folderChoices.teams].filter(t=>t!=='Team Logos'&&((activeBrand!=='bchl'&&activeBrand!=='pwhl')||t!==LEAGUE_TEAM)),...presetTeams()]);
  setOptions('builderTeam',teams,selectedTeam,'','Select team…');
  const team=teamEl.value;
- const seasons=team?[...new Set([...(activeBrand==='misc'&&team==='Sun Peaks Resort'?['2026']:[]),...entries.filter(e=>inTeam(e,team)).map(e=>e.season),...[...folderChoices.seasons].filter(x=>canonicalTeam(x.split('/')[0])===canonicalTeam(team)).map(x=>x.slice(x.indexOf('/')+1))])].sort((a,b)=>a.localeCompare(b)):[];
+ const seasons=team?[...new Set([...entries.filter(e=>inTeam(e,team)).map(e=>e.season),...[...folderChoices.seasons].filter(x=>canonicalTeam(x.split('/')[0])===canonicalTeam(team)).map(x=>x.slice(x.indexOf('/')+1))])].sort((a,b)=>a.localeCompare(b)):[];
  setOptions('builderSeason',seasons,selectedSeason,'','Select season…');
  updateTeamStrip();
 }
@@ -555,8 +554,7 @@ const shareLeagueDefs=[
  {key:'pwhl',label:'PWHL',root:()=>localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards',preset:PWHL_TEAMS},
  {key:'nll',label:'NLL',root:()=>localStorage.getItem(NLL_ROOT_KEY)||'/NLL Rinkboards',preset:NLL_TEAMS},
  {key:'usports',label:'USports',root:()=>localStorage.getItem(USPORTS_ROOT_KEY)||'/USports Rinkboards',preset:USPORTS_TEAMS},
- {key:'ncaa',label:'NCAA',root:()=>localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards',preset:[NCAA_TEAM]},
- {key:'misc',label:'Misc.',root:()=>localStorage.getItem(MISC_ROOT_KEY)||'/Misc Rinkboards',preset:MISC_TEAMS}
+ {key:'ncaa',label:'NCAA',root:()=>localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards',preset:[NCAA_TEAM]}
 ];
 let shareRecords=[];
 const shareUI=id=>$(id);
@@ -802,10 +800,10 @@ function bulkMatchName(record,row){
  // Avoid weak accidental matches, especially short sponsor names.
  return Math.min(95,score);
 }
-function bulkRender(){const body=bulkEl('dbBulkRows');body.replaceChildren();let ready=0,needsReview=0;for(const r of bulkRows){const tr=document.createElement('tr');for(const val of [r.line,r.name,r.width,r.qty]){const td=document.createElement('td');td.textContent=String(val);tr.append(td)}const td=document.createElement('td');if(r.options?.length){const select=document.createElement('select');select.style.maxWidth='330px';select.add(new Option('Choose matching artwork…',''));for(const item of r.options){const label=item.e.name+' · '+item.e.size+' ('+item.score+'% match)';select.add(new Option(label,item.e.path))}select.value=r.path||'';select.onchange=()=>{r.path=select.value;bulkUpdate()};td.append(select);if(r.path){const tag=document.createElement('span');tag.style.cssText='display:block;font-size:11px;color:#146c43;margin-top:3px';tag.textContent=r.auto?'✓ Strong match — auto-selected':'✓ Match confirmed';td.append(tag);td.className='dbBulkGood'}else{const hint=document.createElement('span');hint.style.cssText='display:block;font-size:11px;color:#a32222;margin-top:3px';hint.textContent=r.options[0].score>=55?'Suggested matches — please confirm':'Low-confidence suggestions — verify artwork';td.append(hint);td.className='dbBulkBad';needsReview++}}else{td.textContent=r.error||'No suitable artwork with the exact width';td.className='dbBulkBad';needsReview++}tr.append(td);body.append(tr);if(r.path&&Number.isSafeInteger(Number(r.qty))&&Number(r.qty)>=1&&Number(r.qty)<=500)ready++}bulkMsg(ready+' of '+bulkRows.length+' rows ready. '+(bulkRows.length-ready)+' need review. Width must match exactly.');bulkEl('dbBulkApply').disabled=ready!==bulkRows.length||!ready;bulkEl('dbBulkExport').disabled=true}
+function bulkRender(){const body=bulkEl('dbBulkRows');body.replaceChildren();let ready=0;for(const r of bulkRows){const tr=document.createElement('tr');for(const val of [r.line,r.name,r.width,r.qty]){const td=document.createElement('td');td.textContent=String(val);tr.append(td)}const td=document.createElement('td');if(r.options?.length){const select=document.createElement('select');select.style.maxWidth='330px';select.add(new Option('Choose artwork from database…',''));for(const item of r.options){const label=item.e.name+' · '+item.e.size;select.add(new Option(label,item.e.path))}select.value=r.path||'';select.onchange=()=>{r.path=select.value;r.auto=false;bulkUpdate()};td.append(select);if(r.path){const chosen=r.options.find(x=>x.e.path===r.path);const mismatch=chosen&&Number(chosen.e.width)!==bulkWidth(r.width);const tag=document.createElement('span');tag.style.cssText='display:block;font-size:11px;color:'+(mismatch?'#a32222':'#146c43')+';margin-top:3px';tag.textContent=mismatch?'⚠ Selected artwork has a different width — verify before exporting':r.auto?'✓ Automatically selected':'✓ Artwork selected';td.append(tag);td.className=mismatch?'dbBulkBad':'dbBulkGood'}else{const hint=document.createElement('span');hint.style.cssText='display:block;font-size:11px;color:#a32222;margin-top:3px';hint.textContent='Select artwork from the database';td.append(hint);td.className='dbBulkBad'}}else{td.textContent=r.error||'No artwork available for this team and season';td.className='dbBulkBad'}tr.append(td);body.append(tr);if(r.path&&Number.isSafeInteger(Number(r.qty))&&Number(r.qty)>=1&&Number(r.qty)<=500)ready++}bulkMsg(ready+' of '+bulkRows.length+' rows ready. '+(bulkRows.length-ready)+' need review. Check artwork sizes before exporting.');bulkEl('dbBulkApply').disabled=ready!==bulkRows.length||!ready;bulkEl('dbBulkExport').disabled=true}
 function bulkUpdate(){bulkRender()}
-function bulkMatch(){try{const scope=bulkScope();bulkSyncDatabase();bulkRows=bulkParse(bulkEl('dbBulkPaste').value);if(!bulkRows.length)throw Error('Paste at least one production-list row.');for(const r of bulkRows){r.path='';r.auto=false;r.options=[];r.error='';const w=bulkWidth(r.width),qty=Number(r.qty);if(!Number.isFinite(w)){r.error='Missing or invalid width';continue}if(!Number.isSafeInteger(qty)||qty<1||qty>500){r.error='Quantity required (1–500)';continue}const candidates=bulkCandidatesFor(r,scope).map(e=>({e,score:bulkMatchName(e,r)})).filter(x=>x.score>=42).sort((a,b)=>b.score-a.score||a.e.name.localeCompare(b.e.name));r.options=candidates.slice(0,8);if(!r.options.length){r.error='No plausible sponsor at this exact width';continue}const first=r.options[0],second=r.options[1];if(first.score>=94&&(!second||first.score-second.score>=12)){r.path=first.e.path;r.auto=true}}bulkRender()}catch(e){bulkMsg(e.message);bulkEl('dbBulkApply').disabled=true}}
-function bulkApply(){if(bulkEl('dbBulkApply').disabled)return;try{bulkSyncDatabase()}catch(e){bulkMsg(e.message);return}const name=bulkEl('dbBulkName').value.trim();if(!name||name.length>80){bulkMsg('Enter a saved group name (1–80 characters).');return}const paths=new Set();for(const r of bulkRows){if(!r.path||!Number.isSafeInteger(Number(r.qty))||Number(r.qty)<1||Number(r.qty)>500){bulkMsg('Resolve every row first.');return}if(paths.has(r.path)){bulkMsg('The same artwork appears more than once. Combine those quantities in the source list.');return}paths.add(r.path)}const groups=getGroups();if(groups[name]&&!confirm('Replace saved group "'+name+'"?'))return;const items=bulkRows.map(r=>({path:r.path,qty:Number(r.qty)}));groups[name]=items;try{localStorage.setItem(groupStorageKey(),JSON.stringify(groups))}catch(e){bulkMsg('Could not save group: '+e.message);return}selectedPaths.clear();exportQuantities.clear();for(const item of items){selectedPaths.add(item.path);exportQuantities.set(item.path,item.qty)}groupRender();$('dbGroupSelect').value=name;render();bulkMsg('Saved "'+name+'" and selected '+items.length+' designs. You can now export proofs or courier labels.');bulkEl('dbBulkExport').disabled=false}
+function bulkMatch(){try{const scope=bulkScope();bulkSyncDatabase();bulkRows=bulkParse(bulkEl('dbBulkPaste').value);if(!bulkRows.length)throw Error('Paste at least one production-list row.');const scoped=entries.filter(e=>inScope(e,scope.team,scope.season));for(const r of bulkRows){r.path='';r.auto=false;r.options=[];r.error='';const w=bulkWidth(r.width),qty=Number(r.qty);if(!Number.isFinite(w)){r.error='Missing or invalid width';continue}if(!Number.isSafeInteger(qty)||qty<1||qty>500){r.error='Quantity required (1–500)';continue}const ranked=scoped.map(e=>({e,score:bulkMatchName(e,r),sameWidth:Number(e.width)===w})).sort((a,b)=>Number(b.sameWidth)-Number(a.sameWidth)||b.score-a.score||a.e.name.localeCompare(b.e.name));r.options=ranked;if(!r.options.length){r.error='No artwork found in the selected team and season';continue}const sameWidth=ranked.filter(x=>x.sameWidth);const first=sameWidth[0],second=sameWidth[1];if(first&&first.score>=94&&(!second||first.score-second.score>=12)){r.path=first.e.path;r.auto=true}}bulkRender()}catch(e){bulkMsg(e.message);bulkEl('dbBulkApply').disabled=true}}
+function bulkApply(){if(bulkEl('dbBulkApply').disabled)return;try{bulkSyncDatabase()}catch(e){bulkMsg(e.message);return}const name=bulkEl('dbBulkName').value.trim();if(!name||name.length>80){bulkMsg('Enter a saved group name (1–80 characters).');return}const paths=new Set();for(const r of bulkRows){if(!r.path||!Number.isSafeInteger(Number(r.qty))||Number(r.qty)<1||Number(r.qty)>500){bulkMsg('Resolve every row first.');return}const picked=entries.find(e=>e.path===r.path);if(!picked||Number(picked.width)!==bulkWidth(r.width)){bulkMsg('Selected artwork must match the listed width. Check the highlighted row.');return}if(paths.has(r.path)){bulkMsg('The same artwork appears more than once. Combine those quantities in the source list.');return}paths.add(r.path)}const groups=getGroups();if(groups[name]&&!confirm('Replace saved group "'+name+'"?'))return;const items=bulkRows.map(r=>({path:r.path,qty:Number(r.qty)}));groups[name]=items;try{localStorage.setItem(groupStorageKey(),JSON.stringify(groups))}catch(e){bulkMsg('Could not save group: '+e.message);return}selectedPaths.clear();exportQuantities.clear();for(const item of items){selectedPaths.add(item.path);exportQuantities.set(item.path,item.qty)}groupRender();$('dbGroupSelect').value=name;render();bulkMsg('Saved "'+name+'" and selected '+items.length+' designs. You can now export proofs or courier labels.');bulkEl('dbBulkExport').disabled=false}
 async function bulkReadFile(file){const ext=file.name.split('.').pop().toLowerCase();if(ext==='xlsx'||ext==='xls'){if(!window.XLSX)throw Error('Spreadsheet reader could not load. Paste cells directly instead.');const wb=window.XLSX.read(await file.arrayBuffer(),{type:'array'});const sheet=wb.Sheets[wb.SheetNames[0]];return window.XLSX.utils.sheet_to_csv(sheet,{FS:'\t',RS:'\n',blankrows:false})}return await file.text()}
 $('dbBulkOpen').onclick=()=>{bulkOpenScope();bulkResetMatches();bulkEl('dbBulkOverlay').hidden=false;bulkMsg('Select team and season, paste a production list, then Match & Review.')};
 bulkEl('dbBulkTeam').addEventListener('change',()=>{bulkUpdateSeasons('');bulkResetMatches();bulkMsg('Team changed. Select a season and match again.')});
@@ -994,8 +992,7 @@ const GLOBAL_LEAGUES=[
  {id:'pwhl',label:'PWHL',root:()=>localStorage.getItem(PWHL_ROOT_KEY)||'/PWHL Rinkboards'},
  {id:'ncaa',label:'NCAA',root:()=>localStorage.getItem(NCAA_ROOT_KEY)||'/NCAA Rinkboards'},
  {id:'nll',label:'NLL',root:()=>localStorage.getItem(NLL_ROOT_KEY)||'/NLL Rinkboards'},
- {id:'usports',label:'USports',root:()=>localStorage.getItem(USPORTS_ROOT_KEY)||'/USports Rinkboards'},
- {id:'misc',label:'Misc.',root:()=>localStorage.getItem(MISC_ROOT_KEY)||'/Misc Rinkboards'}
+ {id:'usports',label:'USports',root:()=>localStorage.getItem(USPORTS_ROOT_KEY)||'/USports Rinkboards'}
 ];
 const globalTeams=new Map();
 const normalizeGlobal=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
@@ -1012,7 +1009,7 @@ function seedGlobalTeams(){
   const preset=league.id==='ahl'?['Abbotsford Canucks','San Jose Barracuda']:
    league.id==='bchl'?BCHL_TEAMS:league.id==='pwhl'?PWHL_TEAMS:
    league.id==='nll'?NLL_TEAMS:league.id==='usports'?USPORTS_TEAMS:
-   league.id==='ncaa'?[NCAA_TEAM]:league.id==='misc'?MISC_TEAMS:[];
+   league.id==='ncaa'?[NCAA_TEAM]:[];
   for(const team of [...known,...preset])globalAdd(team,league);
  }
 }
