@@ -508,8 +508,30 @@ async function loadPreview(tile,record){
   const thumbnail=await pending;
   if(!tile.isConnected)return;
   const img=document.createElement('img');img.alt=record.name;img.decoding='async';
-  img.src=thumbnail;tile.prepend(img);
- }catch(e){hoverPreviewCache.delete(path);console.warn('Thumbnail unavailable',record.name,e)}
+  img.src=thumbnail;img.style.cssText='display:block;width:100%;height:auto;object-fit:contain';
+  img.onerror=()=>{img.remove();hoverPreviewCache.delete(path);loadPreviewFallback(tile,record,path)};
+  tile.prepend(img);
+ }catch(e){hoverPreviewCache.delete(path);console.warn('Thumbnail conversion unavailable; trying original SVG',record.name,e);await loadPreviewFallback(tile,record,path)}
+}
+async function loadPreviewFallback(tile,record,path){
+ try{
+  const svg=await download(path);
+  if(!tile.isConnected)return;
+  const blob=new Blob([svg],{type:'image/svg+xml;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const img=document.createElement('img');img.alt=record.name;
+  img.style.cssText='display:block;width:100%;height:auto;object-fit:contain';
+  img.onload=()=>URL.revokeObjectURL(url);
+  img.onerror=()=>{URL.revokeObjectURL(url);img.remove();showPreviewUnavailable(tile,record)};
+  img.src=url;tile.prepend(img);
+ }catch(e){console.warn('Saved preview unavailable',record.name,e);showPreviewUnavailable(tile,record)}
+}
+function showPreviewUnavailable(tile,record){
+ if(!tile.isConnected||tile.querySelector('.db-preview-unavailable'))return;
+ const note=document.createElement('div');note.className='db-preview-unavailable';
+ note.style.cssText='padding:10px;text-align:center;font-size:12px;color:#777';
+ note.textContent='Preview unavailable — select and refresh preview';
+ tile.prepend(note);
 }
 function activeBoard(){let obj=window.RinkboardBridge.getProject();return {obj,board:obj.boards[obj.activeBoard]}}
 function context(){let team=$('dbTeam').value.trim(),season=$('dbSeason').value.trim();if(!team||!season)throw Error('Enter a team and season before saving.');return {team,season}}
